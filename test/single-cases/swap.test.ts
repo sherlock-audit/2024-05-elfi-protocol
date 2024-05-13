@@ -162,14 +162,14 @@ describe('Swap Test', function () {
 
     expect(0).to.be.equals(account.getAccountTokenLiability(accountInfo2, usdcAddr))
 
-    console.log("pre solBalance", account.getAccountTokenAmount(accountInfo1, solAddr))
-    console.log("after solBalance", account.getAccountTokenAmount(accountInfo2, solAddr))
-    console.log("pre usdcBalance", account.getAccountTokenAmount(accountInfo1, usdcAddr))
-    console.log("after usdcBalance", account.getAccountTokenAmount(accountInfo2, usdcAddr))
-    console.log("solBalancePortfolioVault0", solBalancePortfolioVault0)
-    console.log("solBalancePortfolioVault1", solBalancePortfolioVault1)
-    console.log("usdcBalancePortfolioVault0", usdcBalancePortfolioVault0)
-    console.log("usdcBalancePortfolioVault1", usdcBalancePortfolioVault1)
+    // console.log("pre solBalance", account.getAccountTokenAmount(accountInfo1, solAddr))
+    // console.log("after solBalance", account.getAccountTokenAmount(accountInfo2, solAddr))
+    // console.log("pre usdcBalance", account.getAccountTokenAmount(accountInfo1, usdcAddr))
+    // console.log("after usdcBalance", account.getAccountTokenAmount(accountInfo2, usdcAddr))
+    // console.log("solBalancePortfolioVault0", solBalancePortfolioVault0)
+    // console.log("solBalancePortfolioVault1", solBalancePortfolioVault1)
+    // console.log("usdcBalancePortfolioVault0", usdcBalancePortfolioVault0)
+    // console.log("usdcBalancePortfolioVault1", usdcBalancePortfolioVault1)
 
     const usedSol = account.getAccountTokenAmount(accountInfo1, solAddr) - account.getAccountTokenAmount(accountInfo2, solAddr)
     expect(usedSol).to.be.equals(solBalancePortfolioVault0 - solBalancePortfolioVault1)
