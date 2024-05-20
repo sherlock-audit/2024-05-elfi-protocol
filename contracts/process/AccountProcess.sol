@@ -17,6 +17,10 @@ library AccountProcess {
     using SignedMath for int256;
     using SignedSafeMath for int256;
 
+    /// @dev Calculates the cross margin maintenance ratio (MMR) for an account
+    /// @param accountProps The account storage
+    /// @param oracles The oracle parameters used for price feeds
+    /// @return (int256, int256, uint256) The cross MMR, cross net value, and total MMR
     function getCrossMMR(
         Account.Props storage accountProps,
         OracleProcess.OracleParam[] memory oracles
@@ -40,17 +44,27 @@ library AccountProcess {
         );
     }
 
+    /// @dev Checks if the account is subject to cross liquidation
+    /// @param accountProps The account storage
+    /// @return bool True if the account is subject to cross liquidation, false otherwise
     function isCrossLiquidation(Account.Props storage accountProps) external view returns (bool) {
         OracleProcess.OracleParam[] memory oracles;
         (, int256 crossNetValue, uint256 totalMM) = getCrossMMR(accountProps, oracles);
         return crossNetValue <= 0 || crossNetValue.toUint256() <= totalMM;
     }
 
+    /// @dev Gets the net value of the account's portfolio
+    /// @param accountProps The account storage
+    /// @return uint256 The net value of the portfolio
     function getPortfolioNetValue(Account.Props storage accountProps) public view returns (uint256) {
         OracleProcess.OracleParam[] memory oracles;
         return getPortfolioNetValue(accountProps, oracles);
     }
 
+    /// @dev Gets the net value of the account's portfolio using oracle parameters
+    /// @param accountProps The account storage
+    /// @param oracles The oracle parameters used for price feeds
+    /// @return uint256 The net value of the portfolio (in USD)
     function getPortfolioNetValue(
         Account.Props storage accountProps,
         OracleProcess.OracleParam[] memory oracles
@@ -67,11 +81,18 @@ library AccountProcess {
         return totalNetValue;
     }
 
+    /// @dev Gets the total used value of the account
+    /// @param accountProps The account storage
+    /// @return uint256 The total used value
     function getTotalUsedValue(Account.Props storage accountProps) public view returns (uint256) {
         OracleProcess.OracleParam[] memory oracles;
         return getTotalUsedValue(accountProps, oracles);
     }
 
+    /// @dev Gets the total used value of the account using oracle parameters
+    /// @param accountProps The account storage
+    /// @param oracles The oracle parameters used for price feeds
+    /// @return uint256 The total used value (in USD)
     function getTotalUsedValue(
         Account.Props storage accountProps,
         OracleProcess.OracleParam[] memory oracles
@@ -88,6 +109,10 @@ library AccountProcess {
         return totalUsedValue;
     }
 
+    /// @dev Gets the cross used value and borrowing value of the account
+    /// @param accountProps The account storage
+    /// @param oracles The oracle parameters used for price feeds
+    /// @return (uint256, uint256) The total used value and total borrowing value (in USD)
     function getCrossUsedValueAndBorrowingValue(
         Account.Props storage accountProps,
         OracleProcess.OracleParam[] memory oracles
@@ -107,6 +132,8 @@ library AccountProcess {
         return (totalUsedValue, totalBorrowingValue);
     }
 
+    /// @dev Gets the cross net value and total quantity of the account
+    /// @param accountProps The account storage
     function getCrossNetValueAndTotalQty(
         Account.Props storage accountProps
     ) public view returns (int256 crossNetValue, int256 totalQty) {
@@ -119,11 +146,18 @@ library AccountProcess {
         totalQty = cache.totalQty.toInt256();
     }
 
+    /// @dev Gets the cross available value of the account
+    /// @param accountProps The account storage
+    /// @return int256 The cross available value (in USD)
     function getCrossAvailableValue(Account.Props storage accountProps) public view returns (int256) {
         OracleProcess.OracleParam[] memory oracles;
         return getCrossAvailableValue(accountProps, oracles);
     }
 
+    /// @dev Gets the cross available value of the account using oracle parameters 
+    /// @param accountProps The account storage
+    /// @param oracles The oracle parameters used for price feeds
+    /// @return int256 The cross available value (in USD)
     function getCrossAvailableValue(
         Account.Props storage accountProps,
         OracleProcess.OracleParam[] memory oracles
@@ -146,6 +180,12 @@ library AccountProcess {
             (cache.totalIMUsdFromBalance + totalBorrowingValue).toInt256();
     }
 
+    /// @dev Calculates the cross net value for the account
+    /// @param cache The position statics cache
+    /// @param portfolioNetValue The net value of the portfolio
+    /// @param totalUsedValue The total used value
+    /// @param orderHoldUsd The order hold value in USD
+    /// @return int256 The cross net value (in USD)
     function _getCrossNetValue(
         PositionQueryProcess.PositionStaticsCache memory cache,
         uint256 portfolioNetValue,
@@ -159,6 +199,11 @@ library AccountProcess {
             cache.totalPosFee;
     }
 
+    /// @dev Gets the net value of a specific token
+    /// @param token The address of the token
+    /// @param tokenBalance The balance of the token
+    /// @param oracles The oracle parameters used for price feeds
+    /// @return uint256 The net value of the token (in USD)
     function _getTokenNetValue(
         address token,
         Account.TokenBalance memory tokenBalance,
@@ -175,6 +220,11 @@ library AccountProcess {
         return CalUtils.mulRate(tokenValue, AppTradeTokenConfig.getTradeTokenConfig(token).discount);
     }
 
+    /// @dev Gets the used value of a specific token
+    /// @param token The address of the token
+    /// @param tokenBalance The balance of the token
+    /// @param oracles The oracle parameters used for price feeds
+    /// @return uint256 The used value of the token (in USD)
     function _getTokenUsedValue(
         address token,
         Account.TokenBalance memory tokenBalance,
@@ -197,6 +247,11 @@ library AccountProcess {
         }
     }
 
+    /// @dev Gets the borrowing value of a specific token
+    /// @param token The address of the token
+    /// @param tokenBalance The balance of the token
+    /// @param oracles The oracle parameters used for price feeds
+    /// @return uint256 The borrowing value of the token  (in USD)
     function _getTokenBorrowingValue(
         address token,
         Account.TokenBalance memory tokenBalance,

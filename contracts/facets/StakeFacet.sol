@@ -13,11 +13,14 @@ import "../storage/CommonData.sol";
 import "../storage/UuidCreator.sol";
 import "../storage/RoleAccessControl.sol";
 
+/// @dev Stake Facet contract
 contract StakeFacet is IStake, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using LpPool for LpPool.Props;
     using Account for Account.Props;
 
+    /// @dev Create a request to mint LP stake tokens
+    /// @param params The parameters for minting LP stake tokens
     function createMintStakeTokenRequest(MintStakeTokenParams calldata params) external payable override nonReentrant {
         if (params.requestTokenAmount == 0) {
             revert Errors.MintWithAmountZero();
@@ -69,6 +72,9 @@ contract StakeFacet is IStake, ReentrancyGuard {
         );
     }
 
+    /// @dev Executes a mint stake token request in Second-phase, only callable by keeper
+    /// @param requestId The ID of the mint request
+    /// @param oracles The oracle parameters for price validation
     function executeMintStakeToken(
         uint256 requestId,
         OracleProcess.OracleParam[] calldata oracles
@@ -98,6 +104,9 @@ contract StakeFacet is IStake, ReentrancyGuard {
         );
     }
 
+    /// @dev Cancels a mint stake token request, only callable by keeper
+    /// @param requestId The ID of the mint request
+    /// @param reasonCode The reason code for cancellation
     function cancelMintStakeToken(uint256 requestId, bytes32 reasonCode) external {
         uint256 startGas = gasleft();
         RoleAccessControl.checkRole(RoleAccessControl.ROLE_KEEPER);
@@ -121,6 +130,8 @@ contract StakeFacet is IStake, ReentrancyGuard {
         );
     }
 
+    /// @dev Creates a request to redeem stake tokens
+    /// @param params The parameters for redeeming stake tokens
     function createRedeemStakeTokenRequest(
         RedeemStakeTokenParams calldata params
     ) external payable override nonReentrant {
@@ -152,6 +163,9 @@ contract StakeFacet is IStake, ReentrancyGuard {
         RedeemProcess.createRedeemStakeTokenRequest(params, account, params.unStakeAmount);
     }
 
+    /// @dev Executes a redeem stake token request in Second-phase, only callable by keeper
+    /// @param requestId The ID of the redeem request
+    /// @param oracles The oracle parameters for price validation
     function executeRedeemStakeToken(
         uint256 requestId,
         OracleProcess.OracleParam[] calldata oracles
@@ -178,6 +192,9 @@ contract StakeFacet is IStake, ReentrancyGuard {
         );
     }
 
+    /// @dev Cancels a redeem stake token request in Second-phase, only callable by keeper
+    /// @param requestId The ID of the redeem request
+    /// @param reasonCode The reason code for cancellation
     function cancelRedeemStakeToken(uint256 requestId, bytes32 reasonCode) external {
         uint256 startGas = gasleft();
         RoleAccessControl.checkRole(RoleAccessControl.ROLE_KEEPER);

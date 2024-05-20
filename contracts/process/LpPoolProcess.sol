@@ -14,6 +14,11 @@ library LpPoolProcess {
     using LpPoolQueryProcess for LpPool.Props;
     using UsdPool for UsdPool.Props;
 
+    /// @dev Holds a specified amount of tokens in the pool
+    /// @param stakeToken The address of the LP stake token
+    /// @param token The address of the token to hold
+    /// @param amount The amount of tokens to hold
+    /// @param isLong Is a long the position
     function holdPoolAmount(address stakeToken, address token, uint256 amount, bool isLong) external {
         if (isLong) {
             LpPool.Props storage pool = LpPool.load(stakeToken);
@@ -32,6 +37,12 @@ library LpPoolProcess {
         }
     }
 
+    /// @dev Updates the PNL and unHolds a specified amount of tokens in the pool
+    /// @param stakeToken The address of the LP stake token
+    /// @param token The address of the token to unHold
+    /// @param amount The amount of tokens to unHold
+    /// @param tokenPnl The profit and loss in tokens
+    /// @param addLiability The additional liability to add
     function updatePnlAndUnHoldPoolAmount(
         address stakeToken,
         address token,
@@ -69,12 +80,18 @@ library LpPoolProcess {
         }
     }
 
+    /// @dev Validates the pool value, pool value should > 0
+    /// @param pool The pool storage
     function validate(LpPool.Props storage pool) public view {
         if (LpPoolQueryProcess.getPoolIntValue(pool) < 0) {
             revert Errors.PoolValueLessThanZero();
         }
     }
 
+    /// @dev Subtracts a specified amount of tokens from the pool
+    /// @param pool The pool storage
+    /// @param token The address of the token to subtract
+    /// @param amount The amount of tokens to subtract
     function subPoolAmount(LpPool.Props storage pool, address token, uint256 amount) external {
         if (!pool.isSubAmountAllowed(token, amount)) {
             revert Errors.PoolAmountNotEnough(pool.stakeToken, token);
