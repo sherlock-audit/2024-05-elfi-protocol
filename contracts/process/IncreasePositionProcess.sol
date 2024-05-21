@@ -8,6 +8,8 @@ import "./FeeProcess.sol";
 import "./AccountProcess.sol";
 import "./FeeQueryProcess.sol";
 
+/// @title IncreasePositionProcess
+/// @dev Library for increasing position functions 
 library IncreasePositionProcess {
     using SafeMath for uint256;
     using SafeCast for uint256;
@@ -19,6 +21,17 @@ library IncreasePositionProcess {
     using Account for Account.Props;
     using AccountProcess for Account.Props;
 
+    /// @dev IncreasePositionParams struct used in increasePosition
+    ///
+    /// @param requestId the unique request id for increasing position
+    /// @param marginToken the address of margin token
+    /// @param increaseMargin the margin in tokens for increasing position
+    /// @param increaseMarginFromBalance the increasePosition's increase margin from the assets actually held by the account 
+    /// @param marginTokenPrice the price of margin token
+    /// @param indexTokenPrice the price of market index token
+    /// @param leverage the new leverage of position
+    /// @param isLong position's direction
+    /// @param isCrossMargin whether it is a cross-margin position
     struct IncreasePositionParams {
         uint256 requestId;
         address marginToken;
@@ -31,6 +44,18 @@ library IncreasePositionProcess {
         bool isCrossMargin;
     }
 
+
+    /// @dev increase a position
+    /// This function performs several operations:
+    /// 1. Charges the open fee.
+    /// 2. Creates a new position or increases the size of an existing position.
+    /// 3. Updates the borrowing fee and funding fee of the original position if it exists.
+    /// 4. Updates the market open interest (OI).
+    /// 5. Holds an amount in the pool equal to increaseMargin * (leverage - 1).
+    ///
+    /// @param position Position.Props
+    /// @param symbolProps Symbol.Props
+    /// @param params IncreasePositionParams
     function increasePosition(
         Position.Props storage position,
         Symbol.Props memory symbolProps,
@@ -107,7 +132,7 @@ library IncreasePositionProcess {
         uint256 increaseHoldAmount = CalUtils.mulRate(increaseMargin, (params.leverage - 1 * CalUtils.RATE_PRECISION));
         position.holdPoolAmount += increaseHoldAmount;
 
-        // update & verify OI
+        /// update & verify OI
         MarketProcess.updateMarketOI(
             MarketProcess.UpdateOIParams(
                 true,

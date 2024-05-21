@@ -11,15 +11,27 @@ import "../process/CancelOrderProcess.sol";
 import "../process/GasProcess.sol";
 import "../storage/RoleAccessControl.sol";
 
+/// @title OrderFacet
+/// @dev Contract to handle creation, execution, cancellation and query of orders
 contract OrderFacet is IOrder, ReentrancyGuard {
     using SafeCast for uint256;
     using Account for Account.Props;
     using Order for Order.Props;
 
-    function createOrderRequest(PlaceOrderParams calldata params) external payable override nonReentrant {
+    /// @dev creates and stores an order
+    /// @param params IOrder.PlaceOrderParams
+    function createOrderRequest(
+        PlaceOrderParams calldata params
+    ) external payable override nonReentrant {
         address account = msg.sender;
-        if (params.posSide == Order.PositionSide.INCREASE && !params.isCrossMargin) {
-            require(!params.isNativeToken || msg.value == params.orderMargin, "Deposit native token amount error!");
+        if (
+            params.posSide == Order.PositionSide.INCREASE &&
+            !params.isCrossMargin
+        ) {
+            require(
+                !params.isNativeToken || msg.value == params.orderMargin,
+                "Deposit native token amount error!"
+            );
             AssetsProcess.depositToVault(
                 AssetsProcess.DepositParams(
                     account,
@@ -34,7 +46,11 @@ contract OrderFacet is IOrder, ReentrancyGuard {
         OrderProcess.createOrderRequest(accountProps, params, true);
     }
 
-    function batchCreateOrderRequest(PlaceOrderParams[] calldata params) external payable override nonReentrant {
+    /// @dev batch creates and stores orders, only decrease orders supported
+    /// @param params IOrder.PlaceOrderParams[]
+    function batchCreateOrderRequest(
+        PlaceOrderParams[] calldata params
+    ) external payable override nonReentrant {
         address account = msg.sender;
         Account.Props storage accountProps = Account.loadOrCreate(account);
         uint256 totalExecutionFee;
@@ -47,23 +63,37 @@ contract OrderFacet is IOrder, ReentrancyGuard {
             if (isCrossMargin != params[i].isCrossMargin) {
                 revert Errors.MarginModeError();
             }
-            GasProcess.validateExecutionFeeLimit(params[i].executionFee, chainConfig.placeDecreaseOrderGasFeeLimit);
+            GasProcess.validateExecutionFeeLimit(
+                params[i].executionFee,
+                chainConfig.placeDecreaseOrderGasFeeLimit
+            );
             OrderProcess.createOrderRequest(accountProps, params[i], false);
             totalExecutionFee += params[i].executionFee;
         }
-        require(msg.value == totalExecutionFee, "Batch place order with execution fee error!");
+        require(
+            msg.value == totalExecutionFee,
+            "Batch place order with execution fee error!"
+        );
         AssetsProcess.depositToVault(
             AssetsProcess.DepositParams(
                 accountProps.owner,
                 chainConfig.wrapperToken,
                 totalExecutionFee,
-                isCrossMargin ? AssetsProcess.DepositFrom.MANUAL : AssetsProcess.DepositFrom.ORDER,
+                isCrossMargin
+                    ? AssetsProcess.DepositFrom.MANUAL
+                    : AssetsProcess.DepositFrom.ORDER,
                 true
             )
         );
     }
 
-    function executeOrder(uint256 orderId, OracleProcess.OracleParam[] calldata oracles) external override {
+    /// @dev executes the given order
+    /// @param orderId the unique id of the order to be cancelled
+    /// @param oracles OracleProcess.OracleParam[]
+    function executeOrder(
+        uint256 orderId,
+        OracleProcess.OracleParam[] calldata oracles
+    ) external override {
         uint256 startGas = gasleft();
         RoleAccessControl.checkRole(RoleAccessControl.ROLE_KEEPER);
         Order.OrderInfo memory order = Order.get(orderId);
@@ -86,13 +116,21 @@ contract OrderFacet is IOrder, ReentrancyGuard {
         );
     }
 
-    function cancelOrder(uint256 orderId, bytes32 reasonCode) external override {
+    /// @dev cancels the given order. one scenario is the user canceling the order, and the other is the keeper canceling the order after detecting that the order execution failed
+    /// @param orderId the unique id of the order to be cancelled
+    /// @param reasonCode the reason for order cancellation
+    function cancelOrder(
+        uint256 orderId,
+        bytes32 reasonCode
+    ) external override {
         uint256 startGas = gasleft();
         Order.OrderInfo memory order = Order.get(orderId);
         if (order.account == address(0)) {
             revert Errors.OrderNotExists(orderId);
         }
-        bool isKeeper = RoleAccessControl.hasRole(RoleAccessControl.ROLE_KEEPER);
+        bool isKeeper = RoleAccessControl.hasRole(
+            RoleAccessControl.ROLE_KEEPER
+        );
         if (!isKeeper && order.account != msg.sender) {
             revert Errors.OrderNotExists(orderId);
         }
@@ -126,7 +164,9 @@ contract OrderFacet is IOrder, ReentrancyGuard {
 
     receive() external payable {}
 
-    function getAccountOrders(address account) external view override returns (AccountOrder[] memory result) {
+    function getAccountOrders(
+        address account
+    ) external view override returns (AccountOrder[] memory result) {
         Account.Props storage accountProps = Account.load(account);
         if (accountProps.isExists()) {
             uint256[] memory orders = accountProps.getOrders();

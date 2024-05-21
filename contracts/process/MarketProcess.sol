@@ -4,6 +4,8 @@ pragma solidity ^0.8.18;
 import "../storage/AppConfig.sol";
 import "./MarketQueryProcess.sol";
 
+/// @title MarketProcess
+/// @dev Library to handle market functions 
 library MarketProcess {
     using SafeMath for uint256;
     using SafeCast for uint256;
@@ -17,6 +19,13 @@ library MarketProcess {
 
     event MarketOIUpdateEvent(bytes32 symbol, bool isLong, uint256 preOpenInterest, uint256 openInterest);
 
+    /// @dev Parameters for updating open interest (OI).
+    /// @param isAdd Indicates if the OI is being added or subtracted.
+    /// @param symbol The market symbol.
+    /// @param token The token address.
+    /// @param qty The changed quantity.
+    /// @param entryPrice The entry price.
+    /// @param isLong Indicates if the position is long or short.
     struct UpdateOIParams {
         bool isAdd;
         bytes32 symbol;
@@ -26,6 +35,8 @@ library MarketProcess {
         bool isLong;
     }
 
+    /// @dev Updates the market funding fee rate.
+    /// @param symbol The market symbol.
     function updateMarketFundingFeeRate(bytes32 symbol) external {
         (bool onlyUpdateTime, MarketQueryProcess.UpdateFundingCache memory cache) = MarketQueryProcess
             .getUpdateMarketFundingFeeRate(symbol);
@@ -51,6 +62,10 @@ library MarketProcess {
         market.emitFundingFeeEvent();
     }
 
+    /// @dev Updates the pool borrowing fee rate.
+    /// @param stakeToken The address of the pool.
+    /// @param isLong Indicates if the position is long or short.
+    /// @param marginToken The margin token address.
     function updatePoolBorrowingFeeRate(address stakeToken, bool isLong, address marginToken) external {
         if (isLong) {
             LpPool.Props storage pool = LpPool.load(stakeToken);
@@ -72,6 +87,12 @@ library MarketProcess {
         }
     }
 
+    /// @dev Updates the total borrowing fee.
+    /// @param stakeToken The address of the pool.
+    /// @param isLong Indicates if the position is long or short.
+    /// @param marginToken The margin token address.
+    /// @param borrowingFee The changed borrowing fee.
+    /// @param realizedBorrowingFee The realized borrowing fee.
     function updateTotalBorrowingFee(
         address stakeToken,
         bool isLong,
@@ -101,6 +122,12 @@ library MarketProcess {
         }
     }
 
+    /// @dev Updates the market funding fee.
+    /// @param symbol The market symbol.
+    /// @param realizedFundingFeeDelta The delta of the realized funding fee.
+    /// @param isLong Indicates if the position is long or short.
+    /// @param needUpdateUnsettle Indicates if the unsettled amount needs to be updated.
+    /// @param marginToken The margin token address.
     function updateMarketFundingFee(
         bytes32 symbol,
         int256 realizedFundingFeeDelta,
@@ -126,6 +153,8 @@ library MarketProcess {
         }
     }
 
+    /// @notice Updates the market open interest (OI).
+    /// @param params UpdateOIParams.
     function updateMarketOI(UpdateOIParams memory params) external {
         Market.Props storage market = Market.load(params.symbol);
         AppConfig.SymbolConfig memory symbolConfig = AppConfig.getSymbolConfig(params.symbol);
@@ -160,6 +189,9 @@ library MarketProcess {
         }
     }
 
+    /// @dev Calculates the duration since the last fee update.
+    /// @param lastUpdateTime The timestamp of the last update.
+    /// @return The duration in seconds since the last update.
     function _getFeeDurations(uint256 lastUpdateTime) internal view returns (uint256) {
         if (lastUpdateTime == 0) {
             return 0;
@@ -167,6 +199,10 @@ library MarketProcess {
         return ChainUtils.currentTimestamp() - lastUpdateTime;
     }
 
+    /// @dev Updates the market position's entry price and open interest.
+    /// @param position Market.MarketPosition.
+    /// @param params UpdateOIParams.
+    /// @param tickSize The tick size used for calculating the average entry price.
     function _addOI(Market.MarketPosition storage position, UpdateOIParams memory params, uint256 tickSize) internal {
         if (position.openInterest == 0) {
             position.entryPrice = params.entryPrice;
@@ -190,6 +226,9 @@ library MarketProcess {
         );
     }
 
+    /// @dev Updates the market position's entry price and open interest.
+    /// @param position Market.MarketPosition.
+    /// @param params UpdateOIParams.
     function _subOI(Market.MarketPosition storage position, UpdateOIParams memory params) internal {
         if (position.openInterest <= params.qty) {
             position.entryPrice = 0;
