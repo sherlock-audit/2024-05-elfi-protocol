@@ -42,10 +42,27 @@ library RedeemProcess {
         uint256 redeemFee;
     }
 
+    /// @dev Emitted when a redeem request is created
+    /// @param requestId The ID of the redeem request
+    /// @param data The details of the redeem request
     event CreateRedeemEvent(uint256 indexed requestId, Redeem.Request data);
+
+    /// @dev Emitted when a redeem request is successfully executed
+    /// @param requestId The ID of the redeem request
+    /// @param redeemTokenAmount The amount of tokens redeemed
+    /// @param data The details of the redeem request
     event RedeemSuccessEvent(uint256 indexed requestId, uint256 redeemTokenAmount, Redeem.Request data);
+
+    /// @dev Emitted when a redeem request is canceled
+    /// @param requestId The ID of the redeem request
+    /// @param data The details of the redeem request
+    /// @param reasonCode The reason for cancellation
     event CancelRedeemEvent(uint256 indexed requestId, Redeem.Request data, bytes32 reasonCode);
 
+    /// @dev Creates a redeem request for stake tokens
+    /// @param params The parameters for the redeem request
+    /// @param account The account initiating the redeem request
+    /// @param unStakeAmount The amount to be unStaked fo elfToken
     function createRedeemStakeTokenRequest(
         IStake.RedeemStakeTokenParams memory params,
         address account,
@@ -65,6 +82,9 @@ library RedeemProcess {
         emit CreateRedeemEvent(requestId, redeemRequest);
     }
 
+    /// @dev Executes a redeem request to redeem token base on elfToken
+    /// @param requestId The ID of the redeem request
+    /// @param redeemRequest Redeem.Request
     function executeRedeemStakeToken(uint256 requestId, Redeem.Request memory redeemRequest) external {
         uint256 redeemAmount;
         if (CommonData.getStakeUsdToken() == redeemRequest.stakeToken) {
@@ -82,6 +102,10 @@ library RedeemProcess {
         emit RedeemSuccessEvent(requestId, redeemAmount, redeemRequest);
     }
 
+    /// @dev Cancels a redeem request for redeeming
+    /// @param requestId The ID of the redeem request
+    /// @param redeemRequest The details of the redeem request
+    /// @param reasonCode The reason for cancellation
     function cancelRedeemStakeToken(
         uint256 requestId,
         Redeem.Request memory redeemRequest,
@@ -91,6 +115,9 @@ library RedeemProcess {
         emit CancelRedeemEvent(requestId, redeemRequest, reasonCode);
     }
 
+    /// @dev Validates and deposits the execution fee for a redeem request
+    /// @param account The account initiating the redeem request
+    /// @param executionFee The execution fee to be deposited
     function validateAndDepositRedeemExecutionFee(address account, uint256 executionFee) external {
         AppConfig.ChainConfig memory chainConfig = AppConfig.getChainConfig();
         GasProcess.validateExecutionFeeLimit(executionFee, chainConfig.redeemGasFeeLimit);
@@ -106,6 +133,9 @@ library RedeemProcess {
         );
     }
 
+    /// @dev Internal function to redeem token base on elfToken
+    /// @param params The details of the redeem request
+    /// @return redeemTokenAmount The amount of tokens redeemed
     function _redeemStakeToken(Redeem.Request memory params) internal returns (uint256 redeemTokenAmount) {
         LpPool.Props storage pool = LpPool.load(params.stakeToken);
         if (pool.baseToken != params.redeemToken) {
@@ -114,6 +144,9 @@ library RedeemProcess {
         redeemTokenAmount = _executeRedeemStakeToken(pool, params, params.redeemToken);
     }
 
+    /// @dev Internal function to redeem stable tokens base elfUSD
+    /// @param params The details of the redeem request
+    /// @return redeemTokenAmount The amount of elfUSD
     function _redeemStakeUsd(Redeem.Request memory params) internal returns (uint256 redeemTokenAmount) {
         address stakeUsdToken = params.stakeToken;
         address account = params.account;
@@ -130,6 +163,11 @@ library RedeemProcess {
         pool.subStableToken(params.redeemToken, redeemTokenAmount);
     }
 
+    /// @dev Internal function to execute the redeem process for stake tokens
+    /// @param pool The pool storage
+    /// @param params The details of the redeem request
+    /// @param baseToken The base token address
+    /// @return The amount of tokens redeemed
     function _executeRedeemStakeToken(
         LpPool.Props storage pool,
         Redeem.Request memory params,
@@ -182,6 +220,11 @@ library RedeemProcess {
         return cache.redeemTokenAmount;
     }
 
+    /// @dev Internal function to execute the redeem process for stake USD tokens
+    /// @param pool The USD pool storage
+    /// @param stakeUsdToken The stake USD token address
+    /// @param params The details of the redeem request
+    /// @return The amount of elfUSD tokens redeemed
     function _executeRedeemStakeUsd(
         UsdPool.Props storage pool,
         address stakeUsdToken,
@@ -224,5 +267,4 @@ library RedeemProcess {
         StakeToken(params.stakeToken).transferOut(params.redeemToken, params.receiver, redeemTokenAmount - redeemFee);
         return redeemTokenAmount;
     }
-    
 }

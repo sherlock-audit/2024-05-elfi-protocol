@@ -21,20 +21,28 @@ library FeeProcess {
     using FeeRewards for FeeRewards.MarketRewards;
     using FeeRewards for FeeRewards.StakingRewards;
 
+    /// @dev Constant for minting fee type
     bytes32 public constant FEE_MINT = keccak256(abi.encode("FEE_MINT"));
 
+    /// @dev Constant for redeeming fee type
     bytes32 public constant FEE_REDEEM = keccak256(abi.encode("FEE_REDEEM"));
 
+    /// @dev Constant for opening position fee type
     bytes32 public constant FEE_OPEN_POSITION = keccak256(abi.encode("FEE_OPEN_POSITION"));
 
+    /// @dev Constant for closing position fee type
     bytes32 public constant FEE_CLOSE_POSITION = keccak256(abi.encode("FEE_CLOSE_POSITION"));
 
+    /// @dev Constant for liquidation fee type
     bytes32 public constant FEE_LIQUIDATION = keccak256(abi.encode("FEE_LIQUIDATION"));
 
+    /// @dev Constant for borrowing fee type
     bytes32 public constant FEE_BORROWING = keccak256(abi.encode("FEE_BORROWING"));
 
+    /// @dev Constant for funding fee type
     bytes32 public constant FEE_FUNDING = keccak256(abi.encode("FEE_FUNDING"));
 
+    /// @dev Parameters for mint or redeem fee event
     struct ChargeMintOrRedeemFeeEventParams {
         address stakeToken;
         address feeToken;
@@ -43,6 +51,7 @@ library FeeProcess {
         uint256 fee;
     }
 
+    /// @dev Cache structure for charging fees
     struct ChargeFeeCache {
         uint256 ratioToStakingRewards;
         uint256 ratioToPoolRewards;
@@ -53,6 +62,13 @@ library FeeProcess {
         address stakeToken;
     }
 
+    /// @dev Event emitted when a trading fee is charged
+    /// @param symbol The symbol of the asset
+    /// @param account The account being charged
+    /// @param positionKey The key of the position
+    /// @param feeType The type of fee being charged
+    /// @param feeToken The token in which the fee is paid
+    /// @param feeAmount The amount of the fee
     event ChargeTradingFeeEvent(
         bytes32 symbol,
         address account,
@@ -62,8 +78,17 @@ library FeeProcess {
         uint256 feeAmount
     );
 
+    /// @dev Event emitted when a mint or redeem fee is charged
+    /// @param params The parameters of the mint or redeem fee event
     event ChargeMintOrRedeemFeeEvent(ChargeMintOrRedeemFeeEventParams params);
 
+    /// @dev Event emitted when a borrowing fee is charged
+    /// @param isCrossMargin Is cross margin mode
+    /// @param stakeToken The LP stake token 
+    /// @param token The token in which the fee is paid
+    /// @param account The account being charged
+    /// @param feeType The type of fee being charged
+    /// @param fee The amount of the fee
     event ChargeBorrowingFeeEvent(
         bool isCrossMargin,
         address stakeToken,
@@ -73,6 +98,9 @@ library FeeProcess {
         uint256 fee
     );
 
+    /// @dev Updates the borrowing fee for a given position
+    /// @param position The position
+    /// @param stakeToken The LP stake token
     function updateBorrowingFee(Position.Props storage position, address stakeToken) public {
         uint256 cumulativeBorrowingFeePerToken = MarketQueryProcess.getCumulativeBorrowingFeePerToken(
             stakeToken,
@@ -99,6 +127,8 @@ library FeeProcess {
         );
     }
 
+    /// @dev Updates the funding fee for a given position
+    /// @param position The position
     function updateFundingFee(Position.Props storage position) public {
         int256 fundingFeePerQty = MarketQueryProcess.getFundingFeePerQty(position.symbol, position.isLong);
         if (fundingFeePerQty == position.positionFee.openFundingFeePerQty) {
@@ -136,6 +166,12 @@ library FeeProcess {
         );
     }
 
+    /// @dev Charges a trading fee for rewards
+    /// @param fee The amount of the fee
+    /// @param symbol The symbol of the asset
+    /// @param feeType The type of fee being charged
+    /// @param feeToken The token in which the fee is paid
+    /// @param position The position being charged
     function chargeTradingFee(
         uint256 fee,
         bytes32 symbol,
@@ -164,6 +200,13 @@ library FeeProcess {
         emit ChargeTradingFeeEvent(symbol, position.account, position.key, feeType, feeToken, fee);
     }
 
+    /// @dev Charges a mint or redeem fee for rewards
+    /// @param fee The amount of the fee
+    /// @param stakeToken The token being staked
+    /// @param feeToken The token in which the fee is paid
+    /// @param account The account being charged
+    /// @param feeType The type of fee being charged
+    /// @param isCollateral The feeToken is collateral or not (like stETH is collateral)
     function chargeMintOrRedeemFee(
         uint256 fee,
         address stakeToken,
@@ -208,6 +251,13 @@ library FeeProcess {
         emit ChargeMintOrRedeemFeeEvent(params);
     }
 
+    /// @dev Charges a borrowing fee for rewards
+    /// @param isCrossMargin Is cross margin
+    /// @param fee The amount of the fee
+    /// @param stakeToken The LP stake token 
+    /// @param feeToken The token in which the fee is paid
+    /// @param account The account being charged
+    /// @param feeType The type of fee being charged
     function chargeBorrowingFee(
         bool isCrossMargin,
         uint256 fee,

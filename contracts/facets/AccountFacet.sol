@@ -9,11 +9,16 @@ import "../process/AssetsProcess.sol";
 import "../process/AccountProcess.sol";
 import "../storage/RoleAccessControl.sol";
 
+/// @title Account Facet Contract
+/// @dev This contract handles account-related functions such as deposits and withdrawals.
 contract AccountFacet is IAccount {
     using SafeERC20 for IERC20;
     using Account for Account.Props;
     using AccountProcess for Account.Props;
 
+    /// @dev Deposit token to account for cross mode trading
+    /// @param token Address of the token, e.g., address of USDC
+    /// @param amount Token amount to deposit
     function deposit(address token, uint256 amount) external payable override {
         if (amount == 0) {
             revert Errors.AmountZeroNotAllowed();
@@ -37,6 +42,9 @@ contract AccountFacet is IAccount {
         );
     }
 
+    /// @dev Create a request for token withdrawal
+    /// @param token Address of the token, e.g. address of USDC
+    /// @param amount Token amount to withdraw
     function createWithdrawRequest(address token, uint256 amount) external override {
         AddressUtils.validEmpty(token);
         if (amount == 0) {
@@ -45,6 +53,9 @@ contract AccountFacet is IAccount {
         AssetsProcess.createWithdrawRequest(token, amount);
     }
 
+    /// @dev Execute the given withdraw request, only callable by keeper
+    /// @param requestId Unique withdraw request Id
+    /// @param oracles Price oracles info from keeper
     function executeWithdraw(uint256 requestId, OracleProcess.OracleParam[] calldata oracles) external override {
         RoleAccessControl.checkRole(RoleAccessControl.ROLE_KEEPER);
         Withdraw.Request memory request = Withdraw.get(requestId);
@@ -56,6 +67,9 @@ contract AccountFacet is IAccount {
         OracleProcess.clearOraclePrice();
     }
 
+    /// @dev Cancel the given withdraw request, only callable by keeper
+    /// @param requestId Unique withdraw request Id
+    /// @param reasonCode Cancel reason for event emit
     function cancelWithdraw(uint256 requestId, bytes32 reasonCode) external override {
         RoleAccessControl.checkRole(RoleAccessControl.ROLE_KEEPER);
         Withdraw.Request memory request = Withdraw.get(requestId);
@@ -65,11 +79,16 @@ contract AccountFacet is IAccount {
         AssetsProcess.cancelWithdraw(requestId, request, reasonCode);
     }
 
+    /// @dev Batch update account token
+    /// @param params Parameters for updating account token
     function batchUpdateAccountToken(AssetsProcess.UpdateAccountTokenParams calldata params) external override {
         AddressUtils.validEmpty(params.account);
         AssetsProcess.updateAccountToken(params);
     }
 
+    /// @dev Get account information for cross mode trading
+    /// @param account Address of the account
+    /// @return AccountInfo structure containing account details
     function getAccountInfo(address account) external view override returns (AccountInfo memory) {
         Account.Props storage accountInfo = Account.load(account);
         AccountInfo memory result;
@@ -86,6 +105,10 @@ contract AccountFacet is IAccount {
         return result;
     }
 
+    /// @dev Get account information with oracles for cross trading mode
+    /// @param account Address of the account
+    /// @param oracles Oracle parameters, we can get availableValue, accountMMR, crossNetValue... with oracles data
+    /// @return AccountInfo structure containing account details
     function getAccountInfoWithOracles(
         address account,
         OracleProcess.OracleParam[] calldata oracles
@@ -118,5 +141,6 @@ contract AccountFacet is IAccount {
         return result;
     }
 
+    /// @dev Fallback function to receive Ether
     receive() external payable {}
 }

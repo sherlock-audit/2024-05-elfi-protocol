@@ -38,10 +38,29 @@ library MintProcess {
         uint256 mintStakeAmount;
     }
 
+    /// @dev Emitted when a mint request is canceled
+    /// @param requestId The ID of the mint request
+    /// @param data The mint request data
+    /// @param reasonCode The reason code for cancellation
     event CancelMintEvent(uint256 indexed requestId, Mint.Request data, bytes32 reasonCode);
+
+    /// @dev Emitted when a mint request is successfully executed
+    /// @param requestId The ID of the mint request
+    /// @param mintStakeAmount The amount of stake tokens minted
+    /// @param data The mint request data
     event MintSuccessEvent(uint256 indexed requestId, uint256 mintStakeAmount, Mint.Request data);
+
+    /// @dev Emitted when a mint request is created
+    /// @param requestId The ID of the mint request
+    /// @param data The mint request data
     event CreateMintEvent(uint256 indexed requestId, Mint.Request data);
 
+    /// @dev Creates a mint stake token first-phrase request
+    /// @param params The parameters for minting LP stake tokens
+    /// @param account The account requesting the mint
+    /// @param token The token to be minted
+    /// @param walletRequestTokenAmount The amount of tokens requested from the wallet
+    /// @param isExecutionFeeFromLpVault Whether the execution fee is from the LP vault
     function createMintStakeTokenRequest(
         IStake.MintStakeTokenParams memory params,
         address account,
@@ -65,6 +84,10 @@ library MintProcess {
         emit CreateMintEvent(requestId, mintRequest);
     }
 
+    /// @dev Executes a mint stake token request
+    /// @param requestId The ID of the mint request
+    /// @param mintRequest Mint.Request
+    /// @return stakeAmount The amount of stake tokens minted
     function executeMintStakeToken(
         uint256 requestId,
         Mint.Request memory mintRequest
@@ -90,6 +113,10 @@ library MintProcess {
         emit MintSuccessEvent(requestId, stakeAmount, mintRequest);
     }
 
+    /// @dev Cancels a mint stake token request
+    /// @param requestId The ID of the mint request
+    /// @param mintRequest The mint request data
+    /// @param reasonCode The reason code for cancellation
     function cancelMintStakeToken(uint256 requestId, Mint.Request memory mintRequest, bytes32 reasonCode) external {
         if (mintRequest.walletRequestTokenAmount > 0) {
             VaultProcess.transferOut(
@@ -105,6 +132,10 @@ library MintProcess {
         emit CancelMintEvent(requestId, mintRequest, reasonCode);
     }
 
+    /// @dev Validates and deposits the mint execution fee
+    /// @param account The account requesting the mint
+    /// @param params IStake.MintStakeTokenParams
+    /// @return The remaining wallet request token amount and a boolean indicating if the fee is from the wallet
     function validateAndDepositMintExecutionFee(
         address account,
         IStake.MintStakeTokenParams calldata params
@@ -127,6 +158,9 @@ library MintProcess {
         return (params.walletRequestTokenAmount, false);
     }
 
+    /// @dev Mint operations for the market pool(mint elfBTC, elfETH and so on)
+    /// @param mintRequest Mint.Request
+    /// @return stakeAmount The amount of stake tokens minted
     function _mintStakeToken(Mint.Request memory mintRequest) internal returns (uint256 stakeAmount) {
         if (mintRequest.requestTokenAmount > mintRequest.walletRequestTokenAmount) {
             _transferFromAccount(
@@ -168,8 +202,12 @@ library MintProcess {
         accountProps.addStakeAmount(mintRequest.stakeToken, cache.mintStakeAmount);
         pool.addBaseToken(cache.mintTokenAmount);
         stakeAmount = cache.mintStakeAmount;
+        return stakeAmount;
     }
 
+    /// @dev Mint operations for the usd pool (mint elfUSD)
+    /// @param mintRequest Mint.Request
+    /// @return mintStakeAmount The amount of stake tokens minted
     function _mintStakeUsd(Mint.Request memory mintRequest) internal returns (uint256 mintStakeAmount) {
         if (!UsdPool.isSupportStableToken(mintRequest.requestToken)) {
             revert Errors.MintTokenInvalid(mintRequest.stakeToken, mintRequest.requestToken);
@@ -210,8 +248,14 @@ library MintProcess {
         StakingAccount.Props storage accountProps = StakingAccount.loadOrCreate(mintRequest.account);
         accountProps.addStakeUsdAmount(mintStakeAmount);
         pool.addStableToken(mintRequest.requestToken, baseMintAmount);
+        return mintStakeAmount;
     }
 
+    /// @dev Internal function to execute minting of stake tokens
+    /// @param params The mint request parameters
+    /// @param pool The LP pool storage
+    /// @param baseMintAmount The base amount of tokens to mint
+    /// @return The amount of stake tokens minted
     function _executeMintStakeToken(
         Mint.Request memory params,
         LpPool.Props storage pool,
@@ -225,6 +269,11 @@ library MintProcess {
         return mintStakeTokenAmount;
     }
 
+    /// @dev Internal function to execute minting of USD stake tokens (elfUSD)
+    /// @param params The mint request parameters
+    /// @param pool The USD pool storage
+    /// @param baseMintAmount The base amount of tokens to mint
+    /// @return The amount of stake tokens minted
     function _executeMintStakeUsd(
         Mint.Request memory params,
         UsdPool.Props storage pool,
@@ -261,6 +310,10 @@ library MintProcess {
         return mintStakeTokenAmount;
     }
 
+    /// @dev Internal function to transfer tokens from an account
+    /// @param account The account to transfer from
+    /// @param token The token to transfer
+    /// @param needAmount The amount needed
     function _transferFromAccount(address account, address token, uint256 needAmount) internal {
         Account.Props storage tradeAccount = Account.load(account);
         if (tradeAccount.getTokenAmount(token) < needAmount) {
@@ -273,6 +326,10 @@ library MintProcess {
         }
     }
 
+    /// @dev Computes the amount of LP stake tokens from mint tokens
+    /// @param pool The LP pool storage
+    /// @param mintAmount The amount of mint tokens
+    /// @return The amount of stake tokens
     function computeStakeAmountFromMintToken(
         LpPool.Props storage pool,
         uint256 mintAmount

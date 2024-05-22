@@ -10,6 +10,8 @@ import "../utils/TransferUtils.sol";
 import "./AccountProcess.sol";
 import "./PositionMarginProcess.sol";
 
+/// @title AssetsProcess
+/// @dev Library to handle asset operations such as deposit and withdraw
 library AssetsProcess {
     using SafeERC20 for IERC20;
     using SafeCast for uint256;
@@ -28,9 +30,24 @@ library AssetsProcess {
     bytes32 constant DEPOSIT_ID_KEY = keccak256("DEPOSIT_ID_KEY");
     bytes32 constant WITHDRAW_ID_KEY = keccak256("WITHDRAW_ID_KEY");
 
+    /// @dev Emitted when a withdraw request is created
+    /// @param requestId The ID of the withdraw request
+    /// @param data The details of the withdraw request
     event CreateWithdrawEvent(uint256 indexed requestId, Withdraw.Request data);
+
+    /// @dev Emitted when a withdraw request is successfully executed
+    /// @param requestId The ID of the withdraw request
+    /// @param data The details of the withdraw request
     event WithdrawSuccessEvent(uint256 indexed requestId, Withdraw.Request data);
+
+    /// @dev Emitted when a withdraw request is canceled
+    /// @param requestId The ID of the withdraw request
+    /// @param data The details of the withdraw request
+    /// @param reasonCode The reason for cancellation
     event CancelWithdrawEvent(uint256 indexed requestId, Withdraw.Request data, bytes32 reasonCode);
+
+    /// @dev Emitted when a deposit is made
+    /// @param data The details of the deposit
     event Deposit(DepositParams data);
 
     enum DepositFrom {
@@ -55,6 +72,9 @@ library AssetsProcess {
         uint256 amount;
     }
 
+    /// @dev Deposits token to the appropriate vault based on the deposit parameters
+    /// @param params The parameters for the deposit
+    /// @return The address of the token deposited
     function depositToVault(DepositParams calldata params) public returns (address) {
         IVault vault = IVault(address(this));
         address targetAddress;
@@ -78,6 +98,8 @@ library AssetsProcess {
         return token;
     }
 
+    /// @dev Handles the deposit process and updates the account's token balance
+    /// @param params The parameters for the deposit
     function deposit(DepositParams calldata params) external {
         address token = depositToVault(params);
         Account.Props storage accountProps = Account.loadOrCreate(params.account);
@@ -119,6 +141,9 @@ library AssetsProcess {
         emit Deposit(params);
     }
 
+    /// @dev Withdraws tokens from the account
+    /// @param requestId The ID of the withdraw request
+    /// @param params The parameters for the withdraw
     function withdraw(uint256 requestId, WithdrawParams memory params) public {
         if (params.amount == 0) {
             revert Errors.AmountZeroNotAllowed();
@@ -154,6 +179,9 @@ library AssetsProcess {
         );
     }
 
+    /// @dev Creates a withdraw request
+    /// @param token The token to withdraw
+    /// @param amount The amount to withdraw
     function createWithdrawRequest(address token, uint256 amount) external {
         uint256 requestId = UuidCreator.nextId(WITHDRAW_ID_KEY);
         Withdraw.Request storage request = Withdraw.create(requestId);
@@ -164,6 +192,9 @@ library AssetsProcess {
         emit CreateWithdrawEvent(requestId, request);
     }
 
+    /// @dev Executes a withdraw request in Second-phase
+    /// @param requestId The ID of the withdraw request
+    /// @param request Withdraw.Request
     function executeWithdraw(uint256 requestId, Withdraw.Request memory request) external {
         withdraw(requestId, WithdrawParams(address(0), request.account, request.token, request.amount));
         Withdraw.remove(requestId);
@@ -171,11 +202,17 @@ library AssetsProcess {
         emit WithdrawSuccessEvent(requestId, request);
     }
 
+    /// @dev Cancels a withdraw request in Second-phase
+    /// @param requestId The ID of the withdraw request
+    /// @param request Withdraw.Request
+    /// @param reasonCode The reason for cancellation
     function cancelWithdraw(uint256 requestId, Withdraw.Request memory request, bytes32 reasonCode) external {
         Withdraw.remove(requestId);
         emit CancelWithdrawEvent(requestId, request, reasonCode);
     }
 
+    /// @dev Updates the token balances of an account
+    /// @param params UpdateAccountTokenParams
     function updateAccountToken(UpdateAccountTokenParams calldata params) external {
         Account.Props storage accountProps = Account.load(params.account);
         accountProps.checkExists();
@@ -192,6 +229,9 @@ library AssetsProcess {
         }
     }
 
+    /// @dev Checks if the account has cross-used tokens
+    /// @param account Account.Props 
+    /// @return True if the account has cross-used tokens, false otherwise
     function _hasCrossUsed(Account.Props storage account) internal view returns (bool) {
         if (account.hasLiability()) {
             return true;

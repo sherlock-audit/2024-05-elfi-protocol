@@ -6,10 +6,24 @@ import "../storage/AppConfig.sol";
 import "../utils/Errors.sol";
 
 library VaultProcess {
+
+    /// @dev Transfers out tokens from the vault to a receiver
+    /// @param vault The address of the vault
+    /// @param token The address of the token to transfer
+    /// @param receiver The address of the receiver
+    /// @param amount The amount of tokens to transfer
+    /// @return success A boolean indicating if the transfer was successful
     function transferOut(address vault, address token, address receiver, uint256 amount) external returns (bool) {
         return transferOut(vault, token, receiver, amount, false);
     }
 
+    /// @dev Transfers out tokens from the vault to a receiver with an option to skip balance check
+    /// @param vault The address of the vault
+    /// @param token The address of the token to transfer
+    /// @param receiver The address of the receiver
+    /// @param amount The amount of tokens to transfer
+    /// @param skipBalanceNotEnough A boolean to skip balance check if true
+    /// @return success A boolean indicating if the transfer was successful
     function transferOut(
         address vault,
         address token,
@@ -30,6 +44,12 @@ library VaultProcess {
         return false;
     }
 
+    /// @dev Attempts to transfer out tokens from the vault to a receiver
+    /// @param vault The address of the vault
+    /// @param token The address of the token to transfer
+    /// @param receiver The address of the receiver
+    /// @param amount The amount of tokens to transfer
+    /// @return transferredAmount The amount of tokens actually transferred
     function tryTransferOut(address vault, address token, address receiver, uint256 amount) public returns (uint256) {
         if (amount == 0) {
             return 0;
@@ -47,12 +67,18 @@ library VaultProcess {
         }
     }
 
+    /// @dev Withdraws Ether to a receiver
+    /// @param receiver The address of the receiver
+    /// @param amount The amount of Ether to withdraw
     function withdrawEther(address receiver, uint256 amount) internal {
         address wrapperToken = AppConfig.getChainConfig().wrapperToken;
         IWETH(wrapperToken).withdraw(amount);
         safeTransferETH(receiver, amount);
     }
 
+    /// @dev Safely transfers Ether to a receiver
+    /// @param to The address of the receiver
+    /// @param value The amount of Ether to transfer
     function safeTransferETH(address to, uint256 value) public {
         (bool success, ) = to.call{ value: value }(new bytes(0));
         require(success, "STE");
