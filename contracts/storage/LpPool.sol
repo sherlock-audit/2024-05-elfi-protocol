@@ -10,7 +10,7 @@ import "../utils/ChainUtils.sol";
 import "../utils/Errors.sol";
 import "./AppPoolConfig.sol";
 
-/// @title LpPool Library
+/// @title LpPool Storage
 /// @dev Library for LP pool storage and management
 library LpPool {
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -20,14 +20,14 @@ library LpPool {
     using SafeMath for uint256;
 
     /// @dev Struct to store properties of the liquidity pool
-    /// @param stakeToken The address of stake token
-    /// @param stakeTokenName Stake token name, e.g. elfWETH,elfBTC,elfSOL...
-    /// @param baseToken The address of the base token, e.g. address of WBTC
-    /// @param symbol The symbol of this pool
+    /// @param stakeToken The address of the pool
+    /// @param stakeTokenName the name of the pool, e.g. elfWETH,elfBTC,elfSOL...
+    /// @param baseToken The address of the base token, e.g. WBTC
+    /// @param symbol The market symbol
     /// @param baseTokenBalance  LpPool.TokenBalance
     /// @param stableTokens Set of stable token addresses in this pool
     /// @param stableTokenBalances Mapping of stable token addresses to their balance
-    /// @param tradingFeeRewards LpPool.BorrowingFee
+    /// @param tradingFeeRewards LpPool.FeeRewards
     /// @param borrowingFee LpPool.BorrowingFee
     /// @param apr Annual percentage rate (APR) of this pool
     /// @param totalClaimedRewards Total rewards claimed from this pool
@@ -49,9 +49,9 @@ library LpPool {
     /// @param amount Total amount of the token, it may be come from mint, fee rewards, rebalance or pool PNL.
     /// @param liability Liability associated with the token
     /// @param holdAmount Amount of the token that is currently held, holdAmount will increase when increasing position (margin)
-    /// @param unsettledAmount Unsettled amount of the token, unsettledAmount will increase when pool loss
-    /// @param lossAmount Loss amount of the token
-    /// @param collateralTokenAmounts Mapping of (address -> amounts)
+    /// @param unsettledAmount Unsettled amount of the token, the transition when actual assets or funding fees are not received after the pool has made a profit
+    /// @param lossAmount Loss amount of the token, When a user makes a profit by shorting in the corresponding market, resulting in a loss for the USD pool, the loss will be recorded for this pool
+    /// @param collateralTokenAmounts Temporarily unused
     struct TokenBalance {
         uint256 amount;
         uint256 liability;
@@ -70,6 +70,10 @@ library LpPool {
     }
 
     /// @dev Struct to store borrowing fee details
+    /// @param totalBorrowingFee The total amount of borrowing fees accumulated
+    /// @param totalRealizedBorrowingFee The total amount of borrowing fees that have been realized
+    /// @param cumulativeBorrowingFeePerToken The cumulative borrowing fee per token
+    /// @param lastUpdateTime The last time the borrowing fee were updated
     struct BorrowingFee {
         uint256 totalBorrowingFee;
         uint256 totalRealizedBorrowingFee;
@@ -78,6 +82,19 @@ library LpPool {
     }
 
     /// @dev Struct to cache pool token update event data
+    /// @param stakeToken The address of the pool
+    /// @param token The address of the token
+    /// @param preAmount The previous amount of the token
+    /// @param preLiability The previous liability of the pool
+    /// @param preHoldAmount The previous hold amount of the token
+    /// @param preUnsettledAmount The previous unsettled amount of the token
+    /// @param preLossAmount The previous loss amount of the pool
+    /// @param amount The current amount of the token
+    /// @param liability The current liability of the pool
+    /// @param holdAmount The current hold amount of the token
+    /// @param unsettledAmount The current unsettled amount of the token
+    /// @param lossAmount The current loss amount of the pool
+    /// @param updateBlock The block number when the update occurred
     struct PoolTokenUpdateEventCache {
         address stakeToken;
         address token;
@@ -95,7 +112,7 @@ library LpPool {
     }
 
     /// @dev Event emitted when pool token is updated
-    /// @param stakeToken The address of the stake token
+    /// @param stakeToken The address of the pool
     /// @param token The address of the token
     /// @param preAmount The previous amount of the token
     /// @param preLiability The previous liability of the token
@@ -143,9 +160,9 @@ library LpPool {
     /// @param borrowingFee The updated borrowing fee details
     event PoolBorrowingFeeUpdateEvent(address stakeToken, BorrowingFee borrowingFee);
 
-    /// @dev Loads the storage of the liquidity pool
+    /// @dev Loads LpPool.Props
     /// @param stakeToken The address of the stake token
-    /// @return self The storage of the liquidity pool
+    /// @return self LpPool.Props
     function load(address stakeToken) public pure returns (Props storage self) {
         bytes32 s = keccak256(abi.encode("xyz.elfi.storage.LpPool", stakeToken));
 
@@ -155,14 +172,14 @@ library LpPool {
     }
 
     /// @dev Adds base token to the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param amount The amount of base token to add
     function addBaseToken(Props storage self, uint256 amount) external {
         addBaseToken(self, amount, true);
     }
 
     /// @dev Adds base token to the liquidity pool with an option to emit event
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param amount The amount of base token to add
     /// @param needEmitEvent Boolean indicating whether to emit event
     function addBaseToken(Props storage self, uint256 amount, bool needEmitEvent) public {
@@ -181,7 +198,7 @@ library LpPool {
     }
 
     /// @dev Add collateral base token to the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param amount The amount of base token to add
     /// @param collateral The address of the collateral token
     /// @param collateralAmount The amount of collateral token to add
@@ -215,14 +232,14 @@ library LpPool {
     }
 
     /// @dev Subtracts base token from the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param amount The amount of base token to subtract
     function subBaseToken(Props storage self, uint256 amount) external {
         subBaseToken(self, amount, true);
     }
 
     /// @dev Subtracts base token from the liquidity pool with an option to emit event
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param amount The amount of base token to subtract
     /// @param emitEvent Boolean indicating whether to emit event
     function subBaseToken(Props storage self, uint256 amount, bool emitEvent) public {
@@ -242,7 +259,7 @@ library LpPool {
     }
 
     /// @dev Subtracts collateral base token from the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param amount The amount of base token to subtract
     /// @param collateral The address of the collateral token
     /// @param collateralAmount The amount of collateral token to subtract
@@ -281,7 +298,7 @@ library LpPool {
     }
 
     /// @dev Holds base token in the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param amount The amount of base token to hold
     function holdBaseToken(Props storage self, uint256 amount) external {
         require(
@@ -299,7 +316,7 @@ library LpPool {
     }
 
     /// @dev UnHolds base token in the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param amount The amount of base token to unhold
     function unHoldBaseToken(Props storage self, uint256 amount) external {
         require(self.baseTokenBalance.holdAmount >= amount, "sub hold bigger than hold");
@@ -314,7 +331,7 @@ library LpPool {
     }
 
     /// @dev Adds unsettled base token to the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param amount The amount of base token to add
     function addUnsettleBaseToken(Props storage self, int256 amount) external {
         PoolTokenUpdateEventCache memory cache = _convertBalanceToCache(
@@ -328,7 +345,7 @@ library LpPool {
     }
 
     /// @dev Settles base token in the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param amount The amount of base token to settle
     function settleBaseToken(Props storage self, uint256 amount) external {
         int256 amountInt = amount.toInt256();
@@ -346,7 +363,7 @@ library LpPool {
     }
 
     /// @dev Adds stable token to the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param stableToken The address of the stable token
     /// @param amount The amount of stable token to add
     function addStableToken(Props storage self, address stableToken, uint256 amount) external {
@@ -366,7 +383,7 @@ library LpPool {
     }
 
     /// @dev Subtracts stable token from the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param stableToken The address of the stable token
     /// @param amount The amount of stable token to subtract
     function subStableToken(Props storage self, address stableToken, uint256 amount) external {
@@ -385,7 +402,7 @@ library LpPool {
     }
 
     /// @dev Holds stable token in the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param stableToken The address of the stable token
     /// @param amount The amount of stable token to hold
     function holdStableToken(Props storage self, address stableToken, uint256 amount) external {
@@ -404,7 +421,7 @@ library LpPool {
     }
 
     /// @dev UnHolds stable token in the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param stableToken The address of the stable token
     /// @param amount The amount of stable token to unHold
     function unHoldStableToken(Props storage self, address stableToken, uint256 amount) external {
@@ -420,7 +437,7 @@ library LpPool {
     }
 
     /// @dev Adds unsettled stable token to the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param stableToken The address of the stable token
     /// @param amount The amount of stable token to add
     function addUnsettleStableToken(Props storage self, address stableToken, int256 amount) external {
@@ -438,7 +455,7 @@ library LpPool {
     }
 
     /// @dev Settles stable token in the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param stableToken The address of the stable token
     /// @param amount The amount of stable token to settle
     function settleStableToken(Props storage self, address stableToken, uint256 amount) external {
@@ -458,7 +475,7 @@ library LpPool {
     }
 
     /// @dev Adds loss stable token to the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param stableToken The address of the stable token
     /// @param amount The amount of stable token to add
     function addLossStableToken(Props storage self, address stableToken, uint256 amount) external {
@@ -473,7 +490,7 @@ library LpPool {
     }
 
     /// @dev Subtracts loss stable token from the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param stableToken The address of the stable token
     /// @param amount The amount of stable token to subtract
     function subLossStableToken(Props storage self, address stableToken, uint256 amount) external {
@@ -489,14 +506,14 @@ library LpPool {
     }
 
     /// @dev Gets the list of stable tokens in the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @return The list of stable token addresses
     function getStableTokens(Props storage self) external view returns (address[] memory) {
         return self.stableTokens.values();
     }
 
     /// @dev Gets the balance of a stable token in the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param stableToken The address of the stable token
     /// @return The balance of the stable token
     function getStableTokenBalance(
@@ -507,7 +524,7 @@ library LpPool {
     }
 
     /// @dev Gets the liquidity limit of the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @return The liquidity limit of the pool
     function getPoolLiquidityLimit(Props storage self) public view returns (uint256) {
         return AppPoolConfig.getLpPoolConfig(self.stakeToken).poolLiquidityLimit;
@@ -528,7 +545,7 @@ library LpPool {
     }
 
     /// @dev Gets the amount of a collateral token in the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param token The address of the collateral token
     /// @return The amount of the collateral token
     function getCollateralTokenAmount(Props storage self, address token) external view returns (uint256) {
@@ -537,7 +554,7 @@ library LpPool {
     }
 
     /// @dev Checks if a token amount can be subtracted from the liquidity pool
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @param token The address of the token
     /// @param amount The amount of the token
     /// @return True if the amount can be subtracted, false otherwise
@@ -585,7 +602,7 @@ library LpPool {
     }
 
     /// @dev Checks if the liquidity pool exists
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     function checkExists(Props storage self) external view {
         if (self.baseToken == address(0)) {
             revert Errors.PoolNotExists();
@@ -593,14 +610,14 @@ library LpPool {
     }
 
     /// @dev Checks if the liquidity pool exists
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     /// @return True if the pool exists, false otherwise
     function isExists(Props storage self) external view returns (bool) {
         return self.baseToken != address(0);
     }
 
     /// @dev Emits the PoolBorrowingFeeUpdateEvent event
-    /// @param self The storage of the liquidity pool
+    /// @param self LpPool.Props
     function emitPoolBorrowingFeeUpdateEvent(Props storage self) external {
         emit PoolBorrowingFeeUpdateEvent(self.stakeToken, self.borrowingFee);
     }

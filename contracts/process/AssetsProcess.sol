@@ -10,7 +10,7 @@ import "../utils/TransferUtils.sol";
 import "./AccountProcess.sol";
 import "./PositionMarginProcess.sol";
 
-/// @title AssetsProcess Library
+/// @title AssetsProcess
 /// @dev Library to handle asset operations such as deposit and withdraw
 library AssetsProcess {
     using SafeERC20 for IERC20;
@@ -194,7 +194,7 @@ library AssetsProcess {
 
     /// @dev Executes a withdraw request in Second-phase
     /// @param requestId The ID of the withdraw request
-    /// @param request The details of the withdraw request
+    /// @param request Withdraw.Request
     function executeWithdraw(uint256 requestId, Withdraw.Request memory request) external {
         withdraw(requestId, WithdrawParams(address(0), request.account, request.token, request.amount));
         Withdraw.remove(requestId);
@@ -204,7 +204,7 @@ library AssetsProcess {
 
     /// @dev Cancels a withdraw request in Second-phase
     /// @param requestId The ID of the withdraw request
-    /// @param request The details of the withdraw request
+    /// @param request Withdraw.Request
     /// @param reasonCode The reason for cancellation
     function cancelWithdraw(uint256 requestId, Withdraw.Request memory request, bytes32 reasonCode) external {
         Withdraw.remove(requestId);
@@ -212,7 +212,7 @@ library AssetsProcess {
     }
 
     /// @dev Updates the token balances of an account
-    /// @param params The parameters for updating the account's token balances
+    /// @param params UpdateAccountTokenParams
     function updateAccountToken(UpdateAccountTokenParams calldata params) external {
         Account.Props storage accountProps = Account.load(params.account);
         accountProps.checkExists();
@@ -230,7 +230,7 @@ library AssetsProcess {
     }
 
     /// @dev Checks if the account has cross-used tokens
-    /// @param account The account to check
+    /// @param account Account.Props 
     /// @return True if the account has cross-used tokens, false otherwise
     function _hasCrossUsed(Account.Props storage account) internal view returns (bool) {
         if (account.hasLiability()) {

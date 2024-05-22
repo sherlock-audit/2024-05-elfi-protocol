@@ -84,9 +84,9 @@ library MintProcess {
         emit CreateMintEvent(requestId, mintRequest);
     }
 
-    /// @dev Executes a mint stake token second-phrase request
+    /// @dev Executes a mint stake token request
     /// @param requestId The ID of the mint request
-    /// @param mintRequest The mint request data
+    /// @param mintRequest Mint.Request
     /// @return stakeAmount The amount of stake tokens minted
     function executeMintStakeToken(
         uint256 requestId,
@@ -134,7 +134,7 @@ library MintProcess {
 
     /// @dev Validates and deposits the mint execution fee
     /// @param account The account requesting the mint
-    /// @param params The parameters for minting stake tokens
+    /// @param params IStake.MintStakeTokenParams
     /// @return The remaining wallet request token amount and a boolean indicating if the fee is from the wallet
     function validateAndDepositMintExecutionFee(
         address account,
@@ -158,8 +158,8 @@ library MintProcess {
         return (params.walletRequestTokenAmount, false);
     }
 
-    /// @dev Internal function to mint stake tokens
-    /// @param mintRequest The mint request data
+    /// @dev Mint operations for the market pool(mint elfBTC, elfETH and so on)
+    /// @param mintRequest Mint.Request
     /// @return stakeAmount The amount of stake tokens minted
     function _mintStakeToken(Mint.Request memory mintRequest) internal returns (uint256 stakeAmount) {
         if (mintRequest.requestTokenAmount > mintRequest.walletRequestTokenAmount) {
@@ -205,8 +205,8 @@ library MintProcess {
         return stakeAmount;
     }
 
-    /// @dev Internal function to mint LP stake tokens (mint elfUSD)
-    /// @param mintRequest The mint request data
+    /// @dev Mint operations for the usd pool (mint elfUSD)
+    /// @param mintRequest Mint.Request
     /// @return mintStakeAmount The amount of stake tokens minted
     function _mintStakeUsd(Mint.Request memory mintRequest) internal returns (uint256 mintStakeAmount) {
         if (!UsdPool.isSupportStableToken(mintRequest.requestToken)) {

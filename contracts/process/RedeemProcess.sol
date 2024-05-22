@@ -84,7 +84,7 @@ library RedeemProcess {
 
     /// @dev Executes a redeem request to redeem token base on elfToken
     /// @param requestId The ID of the redeem request
-    /// @param redeemRequest The details of the redeem request
+    /// @param redeemRequest Redeem.Request
     function executeRedeemStakeToken(uint256 requestId, Redeem.Request memory redeemRequest) external {
         uint256 redeemAmount;
         if (CommonData.getStakeUsdToken() == redeemRequest.stakeToken) {

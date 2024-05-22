@@ -18,9 +18,9 @@ library UsdPool {
     using SafeCast for uint256;
 
     /// @dev Struct to store the USD pool information.
-    /// @param stableTokens Set of stable tokens of the USD pool.
-    /// @param stableTokenBalances; Mapping of stable token addresses to their balances.
-    /// @param borrowingFees; Mapping of token addresses to their borrowing fees.
+    /// @param stableTokens Set of supported stable tokens for the USD pool.
+    /// @param stableTokenBalances Mapping of stable token addresses to their balances.
+    /// @param borrowingFees Mapping of token addresses to their borrowing fees.
     /// @param apr Annual percentage rate (APR) of the USD pool.
     /// @param totalClaimedRewards Total rewards claimed from the USD pool.
     struct Props {
@@ -33,8 +33,9 @@ library UsdPool {
 
     /// @dev Struct to store token balance details.
     /// @param amount Total amount of the token (USDC,USDT,DAI...).
-    /// @param holdAmount Token amount that is currently held in order.
-    /// @param unsettledAmount Token amount that is unsettled.
+    /// @param holdAmount Token amount that is currently held by trader.
+    /// @param unsettledAmount Unsettled amount, When a user makes a profit by shorting, resulting in a loss for the USD pool. 
+    ///        Losses will be recorded in the corresponding elfToken pool. The USD pool will record them as unsettled, waiting for the elfToken pool to reimburse
     struct TokenBalance {
         uint256 amount;
         uint256 holdAmount;
@@ -42,10 +43,10 @@ library UsdPool {
     }
 
     /// @dev Struct to store borrowing fee details.
-    /// @param totalBorrowingFee Total borrowing fee accumulated.
-    /// @param totalRealizedBorrowingFee Total realized borrowing fee.
-    /// @param cumulativeBorrowingFeePerToken Cumulative borrowing fee per token.
-    /// @param lastUpdateTime Timestamp of the last update.
+    /// @param totalBorrowingFee The total amount of borrowing fees accumulated
+    /// @param totalRealizedBorrowingFee The total amount of borrowing fees that have been realized
+    /// @param cumulativeBorrowingFeePerToken The cumulative borrowing fee per token
+    /// @param lastUpdateTime The last time the borrowing fee were updated
     struct BorrowingFee {
         uint256 totalBorrowingFee;
         uint256 totalRealizedBorrowingFee;
@@ -53,6 +54,15 @@ library UsdPool {
         uint256 lastUpdateTime;
     }
 
+    // @dev Struct to cache USD pool token update data
+    /// @param token The address of the token
+    /// @param preAmount The previous amount of the token
+    /// @param preHoldAmount The previous hold amount of the token
+    /// @param preUnsettledAmount The previous unsettled amount of the token
+    /// @param amount The current amount of the token
+    /// @param holdAmount The current hold amount of the token
+    /// @param unsettledAmount The current unsettled amount of the token
+    /// @param updateBlock The block number when the update occurred
     struct UsdPoolTokenUpdateCache {
         address token;
         uint256 preAmount;
@@ -64,6 +74,15 @@ library UsdPool {
         uint256 updateBlock;
     }
 
+    /// @dev Event emitted when the USD pool token update occurs
+    /// @param token The address of the token
+    /// @param preAmount The previous amount of the token
+    /// @param preHoldAmount The previous hold amount of the token
+    /// @param preUnsettledAmount The previous unsettled amount of the token
+    /// @param amount The current amount of the token
+    /// @param holdAmount The current hold amount of the token
+    /// @param unsettledAmount The current unsettled amount of the token
+    /// @param updateBlock The block number when the update occurred
     event UsdPoolTokenUpdateEvent(
         address token,
         uint256 preAmount,
@@ -94,7 +113,7 @@ library UsdPool {
     }
 
     /// @dev Adds a stable token to the pool.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @param stableToken The address of the stable token to add.
     /// @param amount The amount of the stable token to add.
     function addStableToken(Props storage self, address stableToken, uint amount) external {
@@ -109,7 +128,7 @@ library UsdPool {
     }
 
     /// @dev Subtracts a stable token from the pool.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @param stableToken The address of the stable token to subtract.
     /// @param amount The amount of the stable token to subtract.
     function subStableToken(Props storage self, address stableToken, uint amount) external {
@@ -124,7 +143,7 @@ library UsdPool {
     }
 
     /// @dev Holds a stable token in the pool.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @param stableToken The address of the stable token to hold.
     /// @param amount The amount of the stable token to hold.
     function holdStableToken(Props storage self, address stableToken, uint amount) external {
@@ -142,7 +161,7 @@ library UsdPool {
     }
 
     /// @dev UnHolds a stable token in the pool.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @param stableToken The address of the stable token to unHold.
     /// @param amount The amount of the stable token to unHold.
     function unHoldStableToken(Props storage self, address stableToken, uint256 amount) external {
@@ -157,7 +176,7 @@ library UsdPool {
     }
 
     /// @dev Adds an unsettled stable token to the pool.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @param stableToken The address of the stable token to add.
     /// @param amount The amount of the stable token to add.
     function addUnsettleStableToken(Props storage self, address stableToken, uint256 amount) external {
@@ -171,7 +190,7 @@ library UsdPool {
     }
 
     /// @dev Settles a stable token in the pool.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @param stableToken The address of the stable token to settle.
     /// @param amount The amount of the stable token to settle.
     /// @param updateAmount Whether to update the amount of the stable token.
@@ -192,7 +211,7 @@ library UsdPool {
     }
 
     /// @dev Adds support for multiple stable tokens.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @param stableTokens The array of stable token addresses to add.
     function addSupportStableTokens(Props storage self, address[] memory stableTokens) external {
         for (uint256 i; i < stableTokens.length; i++) {
@@ -201,7 +220,7 @@ library UsdPool {
     }
 
     /// @dev Removes support for a stable token.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @param stableToken The address of the stable token to remove.
     function removeSupportStableToken(Props storage self, address stableToken) external {
         self.stableTokens.remove(stableToken);
@@ -214,7 +233,7 @@ library UsdPool {
     }
 
     /// @dev Retrieves the borrowing fees for a stable token.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @param stableToken The address of the stable token.
     /// @return The borrowing fee for the stable token.
     function getBorrowingFees(Props storage self, address stableToken) external view returns (BorrowingFee storage) {
@@ -222,7 +241,7 @@ library UsdPool {
     }
 
     /// @dev Retrieves the list of stable tokens in the pool.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @return The array of stable token addresses.
     function getStableTokens(Props storage self) external view returns (address[] memory) {
         return self.stableTokens.values();
@@ -244,7 +263,7 @@ library UsdPool {
     }
 
     /// @dev Retrieves the balance of a stable token.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @param stableToken The address of the stable token.
     /// @return The balance of the stable token.
     function getStableTokenBalance(
@@ -255,7 +274,7 @@ library UsdPool {
     }
 
     /// @dev Retrieves the balances of all stable tokens.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @return The array of stable token balances.
     function getStableTokenBalanceArray(Props storage self) external view returns (TokenBalance[] memory) {
         address[] memory tokens = self.stableTokens.values();
@@ -267,7 +286,7 @@ library UsdPool {
     }
 
     /// @dev Retrieves the borrowing fees for all stable tokens.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @return The array of borrowing fees.
     function getAllBorrowingFees(Props storage self) external view returns (BorrowingFee[] memory) {
         address[] memory tokens = self.stableTokens.values();
@@ -279,7 +298,7 @@ library UsdPool {
     }
 
     /// @dev Retrieves the maximum withdrawal amounts for all stable tokens.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @return The array of maximum withdrawal amounts.
     function getMaxWithdrawArray(Props storage self) external view returns (uint256[] memory) {
         address[] memory tokens = self.stableTokens.values();
@@ -291,7 +310,7 @@ library UsdPool {
     }
 
     /// @dev Retrieves the maximum withdrawal amount for a stable token.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @param stableToken The address of the stable token.
     /// @return The maximum withdrawal amount.
     function getMaxWithdraw(Props storage self, address stableToken) public view returns (uint256) {
@@ -306,7 +325,7 @@ library UsdPool {
     }
 
     /// @dev Retrieves the stable token with the maximum amount.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @return token The address of the stable token with the maximum amount.
     function getMaxAmountStableToken(Props storage self) external view returns (address token) {
         address[] memory tokens = self.stableTokens.values();
@@ -325,7 +344,7 @@ library UsdPool {
     }
 
     /// @dev Checks if a subtraction amount is allowed for a stable token.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @param stableToken The address of the stable token.
     /// @param amount The amount to subtract.
     /// @return True if the subtraction amount is allowed, false otherwise.
@@ -362,7 +381,7 @@ library UsdPool {
     }
 
     /// @dev Emits an event for updating the borrowing fee of a stable token.
-    /// @param self The UsdPool storage
+    /// @param self UsdPool.Props
     /// @param stableToken The address of the stable token.
     function emitPoolBorrowingFeeUpdateEvent(Props storage self, address stableToken) external {
         emit UsdPoolBorrowingFeeUpdateEvent(self.borrowingFees[stableToken]);
