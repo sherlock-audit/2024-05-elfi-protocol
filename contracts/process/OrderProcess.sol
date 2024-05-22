@@ -12,6 +12,8 @@ import "./GasProcess.sol";
 import "./LpPoolProcess.sol";
 import "./FeeProcess.sol";
 
+/// @title OrderProcess
+/// @dev Library for creation, execution orders
 library OrderProcess {
     using Order for Order.Props;
     using Position for Position.Props;
@@ -27,14 +29,19 @@ library OrderProcess {
     bytes32 constant ORDER_ID_KEY = keccak256("ORDER_ID_KEY");
 
     event PlaceOrderEvent(uint256 indexed orderId, Order.OrderInfo data);
-    event OrderFilledEvent(uint256 indexed orderId, Order.OrderInfo data, uint256 fillTime, uint256 fillPrice);
-    event CancelOrderEvent(uint256 indexed orderId, Order.OrderInfo data, bytes32 reasonCode);
+    event OrderFilledEvent(
+        uint256 indexed orderId,
+        Order.OrderInfo data,
+        uint256 fillTime,
+        uint256 fillPrice
+    );
+    event CancelOrderEvent(
+        uint256 indexed orderId,
+        Order.OrderInfo data,
+        bytes32 reasonCode
+    );
 
-    struct ExecuteOrderParams {
-        uint256 orderId;
-        address keeper;
-    }
-
+    /// @dev ExecuteIncreaseOrderCache struct used to record intermediate state values to avoid stack too deep errors
     struct ExecuteIncreaseOrderCache {
         uint256 executionPrice;
         uint256 orderMargin;
@@ -44,6 +51,11 @@ library OrderProcess {
         bool isLong;
     }
 
+    /// @dev creates a new order and store the request
+    ///
+    /// @param accountProps Account.Props
+    /// @param params IOrder.PlaceOrderParams
+    /// @param validateExecutionFee whether to check the execution fee
     function createOrderRequest(
         Account.Props storage accountProps,
         IOrder.PlaceOrderParams calldata params,
@@ -69,9 +81,12 @@ library OrderProcess {
             revert Errors.OnlyOneShortPositionSupport(params.symbol);
         }
 
-        (uint256 orderMargin, bool isExecutionFeeFromTradeVault) = validateExecutionFee
-            ? _validateGasFeeLimitAndInitialMargin(accountProps, params)
-            : (params.orderMargin, !params.isCrossMargin);
+        (
+            uint256 orderMargin,
+            bool isExecutionFeeFromTradeVault
+        ) = validateExecutionFee
+                ? _validateGasFeeLimitAndInitialMargin(accountProps, params)
+                : (params.orderMargin, !params.isCrossMargin);
 
         uint256 orderId = UuidCreator.nextId(ORDER_ID_KEY);
         Order.OrderInfo storage order = Order.create(orderId);
@@ -92,14 +107,23 @@ library OrderProcess {
         order.leverage = params.leverage;
         order.placeTime = params.placeTime;
         order.lastBlock = ChainUtils.currentBlock();
-        if (Order.PositionSide.INCREASE == params.posSide && order.isCrossMargin) {
+        if (
+            Order.PositionSide.INCREASE == params.posSide && order.isCrossMargin
+        ) {
             accountProps.addOrderHoldInUsd(orderMargin);
         }
         accountProps.addOrder(orderId);
         emit PlaceOrderEvent(orderId, order);
     }
 
-    function executeOrder(uint256 orderId, Order.OrderInfo memory order) external {
+    /// @dev execute a order
+    ///
+    /// @param orderId the unique id of the order
+    /// @param order Order.OrderInfo
+    function executeOrder(
+        uint256 orderId,
+        Order.OrderInfo memory order
+    ) external {
         Symbol.Props memory symbolProps = Symbol.load(order.symbol);
 
         _validExecuteOrder(order, symbolProps);
@@ -111,6 +135,14 @@ library OrderProcess {
         Order.remove(orderId);
     }
 
+    /// @dev execute a increase position order
+    ///
+    /// Before executing the order, we will first update the market funding fee rate and borrowing fee rate.
+    /// In isolated margin mode, the order funds will be transferred from the TradeVault to the MarketVault
+    /// 
+    /// @param orderId the unique id of the order
+    /// @param order Order.OrderInfo
+    /// @param symbolProps Symbol.Props
     function _executeIncreaseOrder(
         uint256 orderId,
         Order.OrderInfo memory order,
@@ -134,16 +166,29 @@ library OrderProcess {
         cache.isLong = Order.Side.LONG == order.orderSide;
 
         MarketProcess.updateMarketFundingFeeRate(symbolProps.code);
-        MarketProcess.updatePoolBorrowingFeeRate(symbolProps.stakeToken, cache.isLong, order.marginToken);
+        MarketProcess.updatePoolBorrowingFeeRate(
+            symbolProps.stakeToken,
+            cache.isLong,
+            order.marginToken
+        );
 
-        cache.executionPrice = _getExecutionPrice(order, symbolProps.indexToken);
+        cache.executionPrice = _getExecutionPrice(
+            order,
+            symbolProps.indexToken
+        );
         if (symbolProps.indexToken == order.marginToken) {
             cache.marginTokenPrice = cache.executionPrice;
         } else {
-            cache.marginTokenPrice = OracleProcess.getLatestUsdUintPrice(order.marginToken, !cache.isLong);
+            cache.marginTokenPrice = OracleProcess.getLatestUsdUintPrice(
+                order.marginToken,
+                !cache.isLong
+            );
         }
 
-        (cache.orderMargin, cache.orderMarginFromBalance) = _executeIncreaseOrderMargin(
+        (
+            cache.orderMargin,
+            cache.orderMarginFromBalance
+        ) = _executeIncreaseOrderMargin(
             order,
             accountProps,
             cache.marginTokenPrice
@@ -230,10 +275,25 @@ library OrderProcess {
         );
         accountProps.delOrder(orderId);
 
-        emit OrderFilledEvent(orderId, order, block.timestamp, cache.executionPrice);
+        emit OrderFilledEvent(
+            orderId,
+            order,
+            block.timestamp,
+            cache.executionPrice
+        );
     }
 
-    function _getExecutionPrice(Order.OrderInfo memory order, address indexToken) internal view returns (uint256) {
+    /// @dev get execution price for the order
+    ///
+    /// limit orders and stop orders will return the latest price after meeting the trigger price. 
+    /// market orders will check if they are within the acceptable price range to avoid significant price changes that could cause losses to the user.
+    ///
+    /// @param order Order.OrderInfo
+    /// @param indexToken the market index token
+    function _getExecutionPrice(
+        Order.OrderInfo memory order,
+        address indexToken
+    ) internal view returns (uint256) {
         bool isMinPrice;
         if (Order.PositionSide.INCREASE == order.posSide) {
             isMinPrice = Order.Side.SHORT == order.orderSide;
@@ -241,28 +301,48 @@ library OrderProcess {
             isMinPrice = Order.Side.LONG == order.orderSide;
         }
         if (Order.Type.MARKET == order.orderType) {
-            uint256 indexPrice = OracleProcess.getLatestUsdUintPrice(indexToken, isMinPrice);
+            uint256 indexPrice = OracleProcess.getLatestUsdUintPrice(
+                indexToken,
+                isMinPrice
+            );
             if (
-                (isMinPrice && order.acceptablePrice > 0 && indexPrice < order.acceptablePrice) ||
-                (!isMinPrice && order.acceptablePrice > 0 && indexPrice > order.acceptablePrice)
+                (isMinPrice &&
+                    order.acceptablePrice > 0 &&
+                    indexPrice < order.acceptablePrice) ||
+                (!isMinPrice &&
+                    order.acceptablePrice > 0 &&
+                    indexPrice > order.acceptablePrice)
             ) {
                 revert Errors.ExecutionPriceInvalid();
             }
             return indexPrice;
         }
-        uint256 currentPrice = OracleProcess.getLatestUsdUintPrice(indexToken, isMinPrice);
+        uint256 currentPrice = OracleProcess.getLatestUsdUintPrice(
+            indexToken,
+            isMinPrice
+        );
         bool isLong = Order.Side.LONG == order.orderSide;
         if (
             Order.Type.LIMIT == order.orderType ||
-            (Order.Type.STOP == order.orderType && Order.StopType.TAKE_PROFIT == order.stopType)
+            (Order.Type.STOP == order.orderType &&
+                Order.StopType.TAKE_PROFIT == order.stopType)
         ) {
-            if ((isLong && order.triggerPrice >= currentPrice) || (!isLong && order.triggerPrice <= currentPrice)) {
+            if (
+                (isLong && order.triggerPrice >= currentPrice) ||
+                (!isLong && order.triggerPrice <= currentPrice)
+            ) {
                 return currentPrice;
             }
             revert Errors.ExecutionPriceInvalid();
         }
-        if (Order.Type.STOP == order.orderType && Order.StopType.STOP_LOSS == order.stopType) {
-            if ((isLong && order.triggerPrice <= currentPrice) || (!isLong && order.triggerPrice >= currentPrice)) {
+        if (
+            Order.Type.STOP == order.orderType &&
+            Order.StopType.STOP_LOSS == order.stopType
+        ) {
+            if (
+                (isLong && order.triggerPrice <= currentPrice) ||
+                (!isLong && order.triggerPrice >= currentPrice)
+            ) {
                 return currentPrice;
             }
             revert Errors.ExecutionPriceInvalid();
@@ -270,6 +350,11 @@ library OrderProcess {
         revert Errors.ExecutionPriceInvalid();
     }
 
+    /// @dev process the order margin
+    ///
+    /// @param order Order.OrderInfo
+    /// @param accountProps Account.Props
+    /// @param marginTokenPrice the price of margin token
     function _executeIncreaseOrderMargin(
         Order.OrderInfo memory order,
         Account.Props storage accountProps,
@@ -279,7 +364,8 @@ library OrderProcess {
         address account = accountProps.owner;
         if (order.isCrossMargin) {
             if (accountProps.getCrossAvailableValue() < 0) {
-                int256 fixOrderMarginInUsd = order.orderMargin.toInt256() + accountProps.getCrossAvailableValue();
+                int256 fixOrderMarginInUsd = order.orderMargin.toInt256() +
+                    accountProps.getCrossAvailableValue();
                 if (fixOrderMarginInUsd <= 0) {
                     revert Errors.BalanceNotEnough(account, marginToken);
                 }
@@ -289,7 +375,11 @@ library OrderProcess {
                 accountProps.subOrderHoldInUsd(order.orderMargin);
             }
 
-            orderMargin = CalUtils.usdToToken(order.orderMargin, TokenUtils.decimals(marginToken), marginTokenPrice);
+            orderMargin = CalUtils.usdToToken(
+                order.orderMargin,
+                TokenUtils.decimals(marginToken),
+                marginTokenPrice
+            );
             orderMarginFromBalance = accountProps.useToken(
                 marginToken,
                 orderMargin,
@@ -302,7 +392,10 @@ library OrderProcess {
                 TokenUtils.decimals(marginToken),
                 marginTokenPrice
             );
-            if (orderMarginInUsd < AppTradeConfig.getTradeConfig().minOrderMarginUSD) {
+            if (
+                orderMarginInUsd <
+                AppTradeConfig.getTradeConfig().minOrderMarginUSD
+            ) {
                 revert Errors.OrderMarginTooSmall();
             }
             orderMargin = order.orderMargin;
@@ -310,19 +403,33 @@ library OrderProcess {
         }
     }
 
-    function _isUserPlaceOrder(Order.Type orderType) internal pure returns (bool) {
-        return Order.Type.LIMIT == orderType || Order.Type.MARKET == orderType || Order.Type.STOP == orderType;
+    function _isUserPlaceOrder(
+        Order.Type orderType
+    ) internal pure returns (bool) {
+        return
+            Order.Type.LIMIT == orderType ||
+            Order.Type.MARKET == orderType ||
+            Order.Type.STOP == orderType;
     }
 
-    function _validExecuteOrder(Order.OrderInfo memory order, Symbol.Props memory symbolProps) internal view {
-        AppConfig.SymbolConfig memory symbolConfig = AppConfig.getSymbolConfig(symbolProps.code);
+    function _validExecuteOrder(
+        Order.OrderInfo memory order,
+        Symbol.Props memory symbolProps
+    ) internal view {
+        AppConfig.SymbolConfig memory symbolConfig = AppConfig.getSymbolConfig(
+            symbolProps.code
+        );
         bool isIncrease = Order.PositionSide.INCREASE == order.posSide;
         bool isLong = Order.Side.LONG == order.orderSide;
-        if (_isUserPlaceOrder(order.orderType) && isIncrease && Symbol.Status.OPEN != symbolProps.status) {
+        if (
+            _isUserPlaceOrder(order.orderType) &&
+            isIncrease &&
+            Symbol.Status.OPEN != symbolProps.status
+        ) {
             revert Errors.SymbolStatusInvalid(order.symbol);
         }
 
-        // token verify
+        /// token verify
         if (isIncrease) {
             if (isLong && order.marginToken != symbolProps.baseToken) {
                 revert Errors.TokenInvalid(order.symbol, order.marginToken);
@@ -332,7 +439,10 @@ library OrderProcess {
             }
         }
 
-        if (order.leverage > symbolConfig.maxLeverage || order.leverage < 1 * CalUtils.RATE_PRECISION) {
+        if (
+            order.leverage > symbolConfig.maxLeverage ||
+            order.leverage < 1 * CalUtils.RATE_PRECISION
+        ) {
             revert Errors.LeverageInvalid(order.symbol, order.leverage);
         }
     }
@@ -360,7 +470,9 @@ library OrderProcess {
         return defaultLeverage;
     }
 
-    function _validatePlaceOrder(IOrder.PlaceOrderParams calldata params) internal view {
+    function _validatePlaceOrder(
+        IOrder.PlaceOrderParams calldata params
+    ) internal view {
         if (
             Order.Type.MARKET != params.orderType &&
             Order.Type.LIMIT != params.orderType &&
@@ -381,12 +493,16 @@ library OrderProcess {
             revert Errors.PlaceOrderWithParamsError();
         }
 
-        if (Order.Type.LIMIT == params.orderType && Order.PositionSide.DECREASE == params.posSide) {
+        if (
+            Order.Type.LIMIT == params.orderType &&
+            Order.PositionSide.DECREASE == params.posSide
+        ) {
             revert Errors.PlaceOrderWithParamsError();
         }
 
         if (
-            Order.Type.STOP == params.orderType && (Order.StopType.NONE == params.stopType || params.triggerPrice == 0)
+            Order.Type.STOP == params.orderType &&
+            (Order.StopType.NONE == params.stopType || params.triggerPrice == 0)
         ) {
             revert Errors.PlaceOrderWithParamsError();
         }
@@ -399,18 +515,33 @@ library OrderProcess {
             if (!symbolProps.isSupportIncreaseOrder()) {
                 revert Errors.SymbolStatusInvalid(params.symbol);
             }
-            if (Order.Side.LONG == params.orderSide && params.marginToken != symbolProps.baseToken) {
+            if (
+                Order.Side.LONG == params.orderSide &&
+                params.marginToken != symbolProps.baseToken
+            ) {
                 revert Errors.PlaceOrderWithParamsError();
             }
-            if (Order.Side.SHORT == params.orderSide && !UsdPool.isSupportStableToken(params.marginToken)) {
+            if (
+                Order.Side.SHORT == params.orderSide &&
+                !UsdPool.isSupportStableToken(params.marginToken)
+            ) {
                 revert Errors.PlaceOrderWithParamsError();
             }
-            if (params.isCrossMargin && params.orderMargin < AppTradeConfig.getTradeConfig().minOrderMarginUSD) {
+            if (
+                params.isCrossMargin &&
+                params.orderMargin <
+                AppTradeConfig.getTradeConfig().minOrderMarginUSD
+            ) {
                 revert Errors.PlaceOrderWithParamsError();
             }
         }
     }
 
+    /// @dev execute a decrease position order
+    ///
+    /// @param orderId the unique id of the order
+    /// @param order Order.OrderInfo
+    /// @param symbolProps Symbol.Props
     function _executeDecreaseOrder(
         uint256 orderId,
         Order.OrderInfo memory order,
@@ -419,7 +550,12 @@ library OrderProcess {
         address account = order.account;
         bool isLong = Order.Side.LONG == order.orderSide;
 
-        Position.Props storage position = Position.load(account, order.symbol, order.marginToken, order.isCrossMargin);
+        Position.Props storage position = Position.load(
+            account,
+            order.symbol,
+            order.marginToken,
+            order.isCrossMargin
+        );
         position.checkExists();
 
         if (position.isLong == isLong) {
@@ -431,9 +567,16 @@ library OrderProcess {
         }
 
         MarketProcess.updateMarketFundingFeeRate(symbolProps.code);
-        MarketProcess.updatePoolBorrowingFeeRate(symbolProps.stakeToken, position.isLong, order.marginToken);
+        MarketProcess.updatePoolBorrowingFeeRate(
+            symbolProps.stakeToken,
+            position.isLong,
+            order.marginToken
+        );
 
-        uint256 executionPrice = _getExecutionPrice(order, symbolProps.indexToken);
+        uint256 executionPrice = _getExecutionPrice(
+            order,
+            symbolProps.indexToken
+        );
 
         position.decreasePosition(
             DecreasePositionProcess.DecreasePositionParams(
@@ -450,15 +593,23 @@ library OrderProcess {
         emit OrderFilledEvent(orderId, order, block.timestamp, executionPrice);
     }
 
+    /// @dev Validates the gas fee limit and initial margin for placing an order.
+    /// @param accountProps Account.Props.
+    /// @param params IOrder.PlaceOrderParams.
+    /// @return A tuple containing the adjusted order margin and a boolean indicating whether the execution fee is deposited to TradeVault.
     function _validateGasFeeLimitAndInitialMargin(
         Account.Props storage accountProps,
         IOrder.PlaceOrderParams calldata params
     ) internal returns (uint256, bool) {
         AppConfig.ChainConfig memory chainConfig = AppConfig.getChainConfig();
-        uint256 configGasFeeLimit = Order.PositionSide.INCREASE == params.posSide
+        uint256 configGasFeeLimit = Order.PositionSide.INCREASE ==
+            params.posSide
             ? chainConfig.placeIncreaseOrderGasFeeLimit
             : chainConfig.placeDecreaseOrderGasFeeLimit;
-        GasProcess.validateExecutionFeeLimit(params.executionFee, configGasFeeLimit);
+        GasProcess.validateExecutionFeeLimit(
+            params.executionFee,
+            configGasFeeLimit
+        );
         if (
             params.isNativeToken &&
             params.posSide == Order.PositionSide.INCREASE &&
@@ -467,28 +618,41 @@ library OrderProcess {
         ) {
             return (params.orderMargin - params.executionFee, true);
         }
-        require(msg.value == params.executionFee, "place order with execution fee error!");
+        require(
+            msg.value == params.executionFee,
+            "place order with execution fee error!"
+        );
         AssetsProcess.depositToVault(
             AssetsProcess.DepositParams(
                 accountProps.owner,
                 chainConfig.wrapperToken,
                 params.executionFee,
-                params.isCrossMargin ? AssetsProcess.DepositFrom.MANUAL : AssetsProcess.DepositFrom.ORDER,
+                params.isCrossMargin
+                    ? AssetsProcess.DepositFrom.MANUAL
+                    : AssetsProcess.DepositFrom.ORDER,
                 true
             )
         );
         return (params.orderMargin, !params.isCrossMargin);
     }
 
+    /// @dev Validates the batch gas fee limit for placing an order.
+    /// @param accountProps Account.Props.
+    /// @param params IOrder.PlaceOrderParams.
+    /// @return A tuple containing the adjusted order margin and a boolean indicating whether the execution fee is deposited to TradeVault
     function _validateBatchGasFeeLimit(
         Account.Props storage accountProps,
         IOrder.PlaceOrderParams calldata params
     ) internal returns (uint256, bool) {
         AppConfig.ChainConfig memory chainConfig = AppConfig.getChainConfig();
-        uint256 configGasFeeLimit = Order.PositionSide.INCREASE == params.posSide
+        uint256 configGasFeeLimit = Order.PositionSide.INCREASE ==
+            params.posSide
             ? chainConfig.placeIncreaseOrderGasFeeLimit
             : chainConfig.placeDecreaseOrderGasFeeLimit;
-        GasProcess.validateExecutionFeeLimit(params.executionFee, configGasFeeLimit);
+        GasProcess.validateExecutionFeeLimit(
+            params.executionFee,
+            configGasFeeLimit
+        );
         if (
             params.isNativeToken &&
             params.posSide == Order.PositionSide.INCREASE &&
@@ -502,7 +666,10 @@ library OrderProcess {
             );
             return (params.orderMargin - params.executionFee, true);
         }
-        require(msg.value == params.executionFee, "place order with execution fee error!");
+        require(
+            msg.value == params.executionFee,
+            "place order with execution fee error!"
+        );
         AssetsProcess.depositToVault(
             AssetsProcess.DepositParams(
                 accountProps.owner,

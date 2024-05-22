@@ -6,6 +6,8 @@ import "./VaultProcess.sol";
 import "../storage/Account.sol";
 import "../storage/Order.sol";
 
+/// @title CancelOrderProcess
+/// @dev Library to handle cancellation of orders
 library CancelOrderProcess {
     using Order for Order.Props;
     using Account for Account.Props;
@@ -16,6 +18,11 @@ library CancelOrderProcess {
 
     event CancelOrderEvent(uint256 indexed orderId, Order.OrderInfo data, bytes32 reasonCode);
 
+    /// @dev cancel all cross-margin orders for the user
+    /// when the user's cross-margin position is liquidated, all of the user's cross-margin orders will be canceled.
+    ///
+    /// @param account the user account
+    /// @param reasonCode the reason for cancellation
     function cancelAllCrossOrders(address account, bytes32 reasonCode) internal {
         Account.Props storage accountProps = Account.load(account);
         uint256[] memory orders = accountProps.getOrders();
@@ -36,6 +43,12 @@ library CancelOrderProcess {
         }
     }
 
+    /// @dev cancel the market isolated orders for the user
+    ///
+    /// @param account the user account
+    /// @param symbol the market
+    /// @param marginToken order margin token
+    /// @param reasonCode the reason for cancellation
     function cancelSymbolOrders(address account, bytes32 symbol, address marginToken, bytes32 reasonCode) internal {
         Account.Props storage accountProps = Account.load(account);
         uint256[] memory orders = accountProps.getOrders();
@@ -61,6 +74,14 @@ library CancelOrderProcess {
         }
     }
 
+    /// @dev cancel the stop orders for the user
+    ///
+    /// @param account the user account
+    /// @param symbol the market
+    /// @param marginToken order margin token
+    /// @param isCrossMargin whether is cross-margin order
+    /// @param reasonCode the reason for cancellation
+    /// @param excludeOrder excluded order id
     function cancelStopOrders(
         address account,
         bytes32 symbol,
@@ -93,6 +114,11 @@ library CancelOrderProcess {
         }
     }
 
+    /// @dev cancel a single order
+    ///
+    /// @param orderId the unique id of the order
+    /// @param order Order.OrderInfo
+    /// @param reasonCode the reason for cancellation
     function cancelOrder(uint256 orderId, Order.OrderInfo memory order, bytes32 reasonCode) external {
         Account.Props storage accountProps = Account.load(order.account);
         accountProps.delOrder(orderId);

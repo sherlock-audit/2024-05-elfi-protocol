@@ -14,6 +14,8 @@ import "./FeeProcess.sol";
 import "./VaultProcess.sol";
 import "./AccountProcess.sol";
 
+/// @title PositionMarginProcess
+/// @dev Library for updating position margin and leverage functions
 library PositionMarginProcess {
     using SafeMath for uint256;
     using SafeCast for uint256;
@@ -38,6 +40,7 @@ library PositionMarginProcess {
         bytes32 reasonCode
     );
 
+    /// @dev AddPositionMarginCache struct used to record intermediate state values to avoid stack too deep errors
     struct AddPositionMarginCache {
         address stakeToken;
         uint256 addMarginAmount;
@@ -47,6 +50,12 @@ library PositionMarginProcess {
         uint256 addInitialMarginFromBalance;
     }
 
+    /// @dev creates position margin changed request
+    ///
+    /// @param account the user address
+    /// @param params IPosition.UpdatePositionMarginParams
+    /// @param updateMarginAmount the changed margin amount
+    /// @param isExecutionFeeFromTradeVault whether the execution fee collected in the first phase is deposited to the Trade Vault
     function createUpdatePositionMarginRequest(
         address account,
         IPosition.UpdatePositionMarginParams memory params,
@@ -66,6 +75,12 @@ library PositionMarginProcess {
         emit CreateUpdatePositionMarginEvent(requestId, request);
     }
 
+    /// @dev creates position leverage changed request
+    ///
+    /// @param account the user address
+    /// @param params IPosition.UpdateLeverageParams
+    /// @param addMarginAmount the added margin amount
+    /// @param isExecutionFeeFromTradeVault whether the execution fee collected in the first phase is deposited to the Trade Vault
     function createUpdateLeverageRequest(
         address account,
         IPosition.UpdateLeverageParams memory params,
@@ -88,6 +103,11 @@ library PositionMarginProcess {
         emit CreateUpdateLeverageEvent(requestId, request);
     }
 
+    /// @dev executes the position margin changed request, only isolated positions supported
+    /// Increasing or decreasing the margin will update the position leverage, and all related open orders will be updated to the latest leverage.
+    ///
+    /// @param requestId the unique id of the request
+    /// @param request UpdatePositionMargin.Request
     function updatePositionMargin(uint256 requestId, UpdatePositionMargin.Request memory request) external {
         Position.Props storage position = Position.load(request.positionKey);
         position.checkExists();
@@ -131,6 +151,10 @@ library PositionMarginProcess {
         emit UpdatePositionMarginSuccessEvent(requestId, request);
     }
 
+    /// @dev executes the position leverage changed request
+    
+    /// @param requestId the unique id of the request
+    /// @param request UpdatePositionMargin.Request
     function updatePositionLeverage(uint256 requestId, UpdateLeverage.Request memory request) external {
         bytes32 positionKey = Position.getPositionKey(
             request.account,
@@ -228,6 +252,10 @@ library PositionMarginProcess {
         emit UpdateLeverageSuccessEvent(requestId, request);
     }
 
+    /// @notice Cancels a request to update the position margin
+    /// @param requestId The ID of the request to be cancelled
+    /// @param request UpdatePositionMargin.Request
+    /// @param reasonCode The reason code for cancellation
     function cancelUpdatePositionMarginRequest(
         uint256 requestId,
         UpdatePositionMargin.Request memory request,
@@ -246,6 +274,10 @@ library PositionMarginProcess {
         emit CancelUpdatePositionMarginEvent(requestId, request, reasonCode);
     }
 
+    /// @notice Cancels a request to update the leverage
+    /// @param requestId The ID of the request to be cancelled
+    /// @param request UpdateLeverage.Request
+    /// @param reasonCode The reason code for cancellation
     function cancelUpdateLeverageRequest(
         uint256 requestId,
         UpdateLeverage.Request memory request,
@@ -271,6 +303,12 @@ library PositionMarginProcess {
         emit CancelUpdateLeverageEvent(requestId, request, reasonCode);
     }
 
+    /// @notice Updates all position's initialMarginInUsdFromBalance
+    /// @param requestId The ID of the request
+    /// @param account The account address
+    /// @param token The token address
+    /// @param amount The amount to be updated
+    /// @param originPositionKey The original position key
     function updateAllPositionFromBalanceMargin(
         uint256 requestId,
         address account,
@@ -300,6 +338,12 @@ library PositionMarginProcess {
         }
     }
 
+    /// @notice Updates the position from balance margin
+    /// @param position Position.Props
+    /// @param needSendEvent Whether to send an event
+    /// @param requestId The ID of the request
+    /// @param amount The amount to be updated
+    /// @return changeAmount The amount changed
     function updatePositionFromBalanceMargin(
         Position.Props storage position,
         bool needSendEvent,
@@ -337,6 +381,9 @@ library PositionMarginProcess {
         }
     }
 
+    /// @notice Executes adding margin to a position
+    /// @param position Position.Props
+    /// @param cache AddPositionMarginCache
     function _executeAddMargin(Position.Props storage position, AddPositionMarginCache memory cache) internal {
         if (
             cache.addMarginAmount >
@@ -367,6 +414,12 @@ library PositionMarginProcess {
         LpPoolProcess.updatePnlAndUnHoldPoolAmount(cache.stakeToken, position.marginToken, subHoldAmount, 0, 0);
     }
 
+    /// @notice Executes reducing margin from a position
+    /// @param position Position.Props
+    /// @param symbolProps Symbol.Props
+    /// @param reduceMargin The amount of margin to be reduced
+    /// @param needUpdateLeverage Whether to update leverage
+    /// @return The amount of margin reduced
     function _executeReduceMargin(
         Position.Props storage position,
         Symbol.Props memory symbolProps,
