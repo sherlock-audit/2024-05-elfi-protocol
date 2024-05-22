@@ -12,6 +12,8 @@ import "../process/ConfigProcess.sol";
 import "../storage/UuidCreator.sol";
 import "../storage/RoleAccessControl.sol";
 
+/// @title PositionFacet
+/// @dev Contract for handling position
 contract PositionFacet is IPosition, ReentrancyGuard {
     using Account for Account.Props;
     using DecreasePositionProcess for Position.Props;
@@ -19,7 +21,11 @@ contract PositionFacet is IPosition, ReentrancyGuard {
 
     bytes32 constant AUTO_REDUCE_ID_KEY = keccak256("AUTO_REDUCE_ID_KEY");
 
-    function createUpdatePositionMarginRequest(UpdatePositionMarginParams calldata params) external payable override {
+    /// @dev creates and stores an position margin change request
+    /// @param params IPosition.UpdatePositionMarginParams
+    function createUpdatePositionMarginRequest(
+        UpdatePositionMarginParams calldata params
+    ) external payable override {
         if (params.updateMarginAmount == 0) {
             revert Errors.AmountZeroNotAllowed();
         }
@@ -33,11 +39,16 @@ contract PositionFacet is IPosition, ReentrancyGuard {
             revert Errors.OnlyIsolateSupported();
         }
         if (params.isAdd) {
-            require(!params.isNativeToken || msg.value == params.updateMarginAmount, "Deposit eth amount error!");
+            require(
+                !params.isNativeToken || msg.value == params.updateMarginAmount,
+                "Deposit eth amount error!"
+            );
             AssetsProcess.depositToVault(
                 AssetsProcess.DepositParams(
                     account,
-                    params.isNativeToken ? AppConfig.getChainConfig().wrapperToken : params.marginToken,
+                    params.isNativeToken
+                        ? AppConfig.getChainConfig().wrapperToken
+                        : params.marginToken,
                     params.updateMarginAmount,
                     AssetsProcess.DepositFrom.ORDER,
                     params.isNativeToken
@@ -45,10 +56,10 @@ contract PositionFacet is IPosition, ReentrancyGuard {
             );
         }
 
-        (uint256 updateMarginAmount, bool isExecutionFeeFromTradeVault) = _validateUpdateMarginExecutionFee(
-            accountProps,
-            params
-        );
+        (
+            uint256 updateMarginAmount,
+            bool isExecutionFeeFromTradeVault
+        ) = _validateUpdateMarginExecutionFee(accountProps, params);
 
         PositionMarginProcess.createUpdatePositionMarginRequest(
             account,
@@ -58,13 +69,18 @@ contract PositionFacet is IPosition, ReentrancyGuard {
         );
     }
 
+    /// @dev executes the given position margin request
+    /// @param requestId the unique id of the request
+    /// @param oracles OracleProcess.OracleParam[]
     function executeUpdatePositionMarginRequest(
         uint256 requestId,
         OracleProcess.OracleParam[] calldata oracles
     ) external override {
         uint256 startGas = gasleft();
         RoleAccessControl.checkRole(RoleAccessControl.ROLE_KEEPER);
-        UpdatePositionMargin.Request memory request = UpdatePositionMargin.get(requestId);
+        UpdatePositionMargin.Request memory request = UpdatePositionMargin.get(
+            requestId
+        );
         if (request.account == address(0)) {
             revert Errors.UpdatePositionMarginRequestNotExists();
         }
@@ -84,14 +100,26 @@ contract PositionFacet is IPosition, ReentrancyGuard {
         );
     }
 
-    function cancelUpdatePositionMarginRequest(uint256 requestId, bytes32 reasonCode) external override {
+    /// @dev cancels the given request
+    /// @param requestId the unique id of the request
+    /// @param reasonCode the reason for request cancellation
+    function cancelUpdatePositionMarginRequest(
+        uint256 requestId,
+        bytes32 reasonCode
+    ) external override {
         uint256 startGas = gasleft();
         RoleAccessControl.checkRole(RoleAccessControl.ROLE_KEEPER);
-        UpdatePositionMargin.Request memory request = UpdatePositionMargin.get(requestId);
+        UpdatePositionMargin.Request memory request = UpdatePositionMargin.get(
+            requestId
+        );
         if (request.account == address(0)) {
             revert Errors.UpdatePositionMarginRequestNotExists();
         }
-        PositionMarginProcess.cancelUpdatePositionMarginRequest(requestId, request, reasonCode);
+        PositionMarginProcess.cancelUpdatePositionMarginRequest(
+            requestId,
+            request,
+            reasonCode
+        );
         GasProcess.processExecutionFee(
             GasProcess.PayExecutionFeeParams(
                 request.isExecutionFeeFromTradeVault
@@ -105,8 +133,13 @@ contract PositionFacet is IPosition, ReentrancyGuard {
         );
     }
 
-    function createUpdateLeverageRequest(UpdateLeverageParams calldata params) external payable override {
-        AppConfig.SymbolConfig memory symbolConfig = ConfigProcess.getSymbolConfig(params.symbol);
+    /// @dev creates and stores an position leverage change request
+    /// @param params IPosition.UpdateLeverageParams
+    function createUpdateLeverageRequest(
+        UpdateLeverageParams calldata params
+    ) external payable override {
+        AppConfig.SymbolConfig memory symbolConfig = ConfigProcess
+            .getSymbolConfig(params.symbol);
         Symbol.Props memory symbolProps = Symbol.load(params.symbol);
         if (symbolProps.code.length == 0) {
             revert Errors.SymbolNotExists();
@@ -114,18 +147,26 @@ contract PositionFacet is IPosition, ReentrancyGuard {
         if (symbolProps.status != Symbol.Status.OPEN) {
             revert Errors.SymbolStatusInvalid(params.symbol);
         }
-        if (params.leverage > symbolConfig.maxLeverage || params.leverage < 1 * CalUtils.RATE_PRECISION) {
+        if (
+            params.leverage > symbolConfig.maxLeverage ||
+            params.leverage < 1 * CalUtils.RATE_PRECISION
+        ) {
             revert Errors.LeverageInvalid(params.symbol, params.leverage);
         }
         address account = msg.sender;
         Account.Props storage accountProps = Account.load(account);
 
         if (params.addMarginAmount > 0 && !params.isCrossMargin) {
-            require(!params.isNativeToken || msg.value == params.addMarginAmount, "Deposit eth amount error!");
+            require(
+                !params.isNativeToken || msg.value == params.addMarginAmount,
+                "Deposit eth amount error!"
+            );
             AssetsProcess.depositToVault(
                 AssetsProcess.DepositParams(
                     account,
-                    params.isNativeToken ? AppConfig.getChainConfig().wrapperToken : params.marginToken,
+                    params.isNativeToken
+                        ? AppConfig.getChainConfig().wrapperToken
+                        : params.marginToken,
                     params.addMarginAmount,
                     AssetsProcess.DepositFrom.ORDER,
                     params.isNativeToken
@@ -133,10 +174,10 @@ contract PositionFacet is IPosition, ReentrancyGuard {
             );
         }
 
-        (uint256 addMarginAmount, bool isExecutionFeeFromTradeVault) = _validateUpdateLeverageExecutionFee(
-            accountProps,
-            params
-        );
+        (
+            uint256 addMarginAmount,
+            bool isExecutionFeeFromTradeVault
+        ) = _validateUpdateLeverageExecutionFee(accountProps, params);
 
         PositionMarginProcess.createUpdateLeverageRequest(
             account,
@@ -146,6 +187,9 @@ contract PositionFacet is IPosition, ReentrancyGuard {
         );
     }
 
+    /// @dev executes the given position leverage changed request
+    /// @param requestId the unique id of the request
+    /// @param oracles OracleProcess.OracleParam[]
     function executeUpdateLeverageRequest(
         uint256 requestId,
         OracleProcess.OracleParam[] calldata oracles
@@ -172,14 +216,24 @@ contract PositionFacet is IPosition, ReentrancyGuard {
         );
     }
 
-    function cancelUpdateLeverageRequest(uint256 requestId, bytes32 reasonCode) external override {
+    /// @dev cancels the given request
+    /// @param requestId the unique id of the request
+    /// @param reasonCode the reason for request cancellation
+    function cancelUpdateLeverageRequest(
+        uint256 requestId,
+        bytes32 reasonCode
+    ) external override {
         uint256 startGas = gasleft();
         RoleAccessControl.checkRole(RoleAccessControl.ROLE_KEEPER);
         UpdateLeverage.Request memory request = UpdateLeverage.get(requestId);
         if (request.account == address(0)) {
             revert Errors.UpdateLeverageRequestNotExists();
         }
-        PositionMarginProcess.cancelUpdateLeverageRequest(requestId, request, reasonCode);
+        PositionMarginProcess.cancelUpdateLeverageRequest(
+            requestId,
+            request,
+            reasonCode
+        );
         GasProcess.processExecutionFee(
             GasProcess.PayExecutionFeeParams(
                 request.isExecutionFeeFromTradeVault
@@ -193,7 +247,13 @@ contract PositionFacet is IPosition, ReentrancyGuard {
         );
     }
 
-    function autoReducePositions(bytes32[] calldata positionKeys) external override {
+    /// @dev auto reduce positions
+    /// when the risk rate of the Pool reaches the upper limit, the keeper will trigger automatic deleveraging of the user's position to ensure that the user's earnings can be covered.
+    ///
+    /// @param positionKeys a set of keys for automatic deleveraging
+    function autoReducePositions(
+        bytes32[] calldata positionKeys
+    ) external override {
         uint256 startGas = gasleft();
         RoleAccessControl.checkRole(RoleAccessControl.ROLE_KEEPER);
         uint256 requestId = UuidCreator.nextId(AUTO_REDUCE_ID_KEY);
@@ -208,21 +268,28 @@ contract PositionFacet is IPosition, ReentrancyGuard {
                     position.isCrossMargin,
                     position.marginToken,
                     position.qty,
-                    OracleProcess.getLatestUsdUintPrice(position.indexToken, position.isLong)
+                    OracleProcess.getLatestUsdUintPrice(
+                        position.indexToken,
+                        position.isLong
+                    )
                 )
             );
         }
         GasProcess.addLossExecutionFee(startGas);
     }
 
-    function getAllPositions(address account) external view override returns (PositionInfo[] memory) {
+    function getAllPositions(
+        address account
+    ) external view override returns (PositionInfo[] memory) {
         Account.Props storage accountInfo = Account.load(account);
         if (!accountInfo.isExists()) {
             PositionInfo[] memory result;
             return result;
         }
         bytes32[] memory positionKeys = accountInfo.getAllPosition();
-        PositionInfo[] memory positions = new PositionInfo[](positionKeys.length);
+        PositionInfo[] memory positions = new PositionInfo[](
+            positionKeys.length
+        );
         for (uint256 i; i < positionKeys.length; i++) {
             Position.Props storage position = Position.load(positionKeys[i]);
             positions[i].position = position;
@@ -245,11 +312,21 @@ contract PositionFacet is IPosition, ReentrancyGuard {
         UpdatePositionMarginParams calldata params
     ) internal returns (uint256, bool) {
         AppConfig.ChainConfig memory chainConfig = AppConfig.getChainConfig();
-        GasProcess.validateExecutionFeeLimit(params.executionFee, chainConfig.positionUpdateMarginGasFeeLimit);
-        if (params.isNativeToken && params.isAdd && params.updateMarginAmount >= params.executionFee) {
+        GasProcess.validateExecutionFeeLimit(
+            params.executionFee,
+            chainConfig.positionUpdateMarginGasFeeLimit
+        );
+        if (
+            params.isNativeToken &&
+            params.isAdd &&
+            params.updateMarginAmount >= params.executionFee
+        ) {
             return (params.updateMarginAmount - params.executionFee, true);
         }
-        require(msg.value == params.executionFee, "update margin with execution fee error!");
+        require(
+            msg.value == params.executionFee,
+            "update margin with execution fee error!"
+        );
         AssetsProcess.depositToVault(
             AssetsProcess.DepositParams(
                 accountProps.owner,
@@ -267,11 +344,21 @@ contract PositionFacet is IPosition, ReentrancyGuard {
         UpdateLeverageParams calldata params
     ) internal returns (uint256, bool) {
         AppConfig.ChainConfig memory chainConfig = AppConfig.getChainConfig();
-        GasProcess.validateExecutionFeeLimit(params.executionFee, chainConfig.positionUpdateLeverageGasFeeLimit);
-        if (params.isNativeToken && params.addMarginAmount >= params.executionFee && !params.isCrossMargin) {
+        GasProcess.validateExecutionFeeLimit(
+            params.executionFee,
+            chainConfig.positionUpdateLeverageGasFeeLimit
+        );
+        if (
+            params.isNativeToken &&
+            params.addMarginAmount >= params.executionFee &&
+            !params.isCrossMargin
+        ) {
             return (params.addMarginAmount - params.executionFee, true);
         }
-        require(msg.value == params.executionFee, "update leverage with execution fee error!");
+        require(
+            msg.value == params.executionFee,
+            "update leverage with execution fee error!"
+        );
         AssetsProcess.depositToVault(
             AssetsProcess.DepositParams(
                 accountProps.owner,

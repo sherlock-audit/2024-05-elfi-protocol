@@ -24,6 +24,8 @@ library LpPoolQueryProcess {
     using LpPool for LpPool.Props;
     using UsdPool for UsdPool.Props;
 
+    /// @dev Get the stable token pool information.
+    /// @return IPool.UsdPoolInfo memory containing the USD pool information.
     function getUsdPool() external view returns (IPool.UsdPoolInfo memory) {
         UsdPool.Props storage pool = UsdPool.load();
         if (pool.getStableTokens().length == 0) {
@@ -51,6 +53,9 @@ library LpPoolQueryProcess {
             );
     }
 
+    /// @dev Get the stable token pool information with oracle data. 
+    /// @param oracles Oracle data with price feeds.
+    /// @return IPool.UsdPoolInfo The USD pool information.
     function getUsdPoolWithOracle(
         OracleProcess.OracleParam[] calldata oracles
     ) external view returns (IPool.UsdPoolInfo memory) {
@@ -80,6 +85,9 @@ library LpPoolQueryProcess {
             );
     }
 
+    /// @dev Get information for all pools.
+    /// @param oracles Oracle data with price feeds.
+    /// @return IPool.PoolInfo[]  All pools information
     function getAllPools(OracleProcess.OracleParam[] calldata oracles) external view returns (IPool.PoolInfo[] memory) {
         address[] memory stakeTokens = CommonData.getAllStakeTokens();
         IPool.PoolInfo[] memory poolInfos = new IPool.PoolInfo[](stakeTokens.length);
@@ -89,11 +97,18 @@ library LpPoolQueryProcess {
         return poolInfos;
     }
 
+    /// @dev Retrieves the value of a specific pool.
+    /// @param pool LpPool storage
+    /// @return uint256 The value of the pool (in USD)
     function getPoolValue(LpPool.Props storage pool) public view returns (uint256) {
         int256 poolValue = getPoolIntValue(pool);
         return poolValue <= 0 ? 0 : poolValue.toUint256();
     }
 
+    /// @dev Retrieves the value of a specific pool with oracle data.
+    /// @param pool LpPool storage
+    /// @param oracles Oracle data with price feeds.
+    /// @return uint256 The value of the pool (in USD)
     function getPoolValue(
         LpPool.Props storage pool,
         OracleProcess.OracleParam[] memory oracles
@@ -102,11 +117,18 @@ library LpPoolQueryProcess {
         return poolValue <= 0 ? 0 : poolValue.toUint256();
     }
 
+    /// @dev Retrieves the integer value of a specific pool.
+    /// @param pool LpPool storage
+    /// @return int256 representing the integer value of the pool.
     function getPoolIntValue(LpPool.Props storage pool) public view returns (int256) {
         OracleProcess.OracleParam[] memory oracles;
         return getPoolIntValue(pool, oracles);
     }
 
+    /// @dev Retrieves the integer value of a specific pool with oracle data.
+    /// @param pool LpPool storage
+    /// @param oracles Oracle data with price feeds.
+    /// @return int256 The integer value of the pool.
     function getPoolIntValue(
         LpPool.Props storage pool,
         OracleProcess.OracleParam[] memory oracles
@@ -143,11 +165,18 @@ library LpPoolQueryProcess {
         return value;
     }
 
+    /// @dev Retrieves the available liquidity of a specific pool.
+    /// @param pool LpPool storage
+    /// @return uint256 representing the available liquidity of the pool.
     function getPoolAvailableLiquidity(LpPool.Props storage pool) external view returns (uint256) {
         OracleProcess.OracleParam[] memory oracles;
         return getPoolAvailableLiquidity(pool, oracles);
     }
 
+    /// @dev Retrieves the available liquidity of a specific pool with oracle data.
+    /// @param pool LpPool storage
+    /// @param oracles Oracle data with price feeds.
+    /// @return uint256 The available liquidity of the pool.
     function getPoolAvailableLiquidity(
         LpPool.Props storage pool,
         OracleProcess.OracleParam[] memory oracles
@@ -190,6 +219,10 @@ library LpPoolQueryProcess {
                 : 0;
     }
 
+    /// @dev Retrieves the available liquidity of a specific USD pool for a given stable token
+    /// @param pool LpPool storage
+    /// @param token Address of the token.
+    /// @return uint256 The available liquidity of the USD pool for the given token.
     function getUsdPoolAvailableLiquidity(UsdPool.Props storage pool, address token) public view returns (uint256) {
         UsdPool.TokenBalance memory tokenBalance = pool.getStableTokenBalance(token);
         uint256 totalAmount = tokenBalance.amount + tokenBalance.unsettledAmount;
@@ -197,11 +230,18 @@ library LpPoolQueryProcess {
         return availableTokenAmount > tokenBalance.holdAmount ? availableTokenAmount - tokenBalance.holdAmount : 0;
     }
 
+    /// @dev Retrieves the value of the USD pool.
+    /// @param pool LpPool storage
+    /// @return uint256 The value of the USD pool.
     function getUsdPoolValue(UsdPool.Props storage pool) public view returns (uint256) {
         OracleProcess.OracleParam[] memory oracles;
         return getUsdPoolValue(pool, oracles);
     }
 
+    /// @dev Retrieves the value of USD pool with oracle data.
+    /// @param pool LpPool storage
+    /// @param oracles Oracle data with price feeds.
+    /// @return uint256 The value of the USD pool.
     function getUsdPoolValue(
         UsdPool.Props storage pool,
         OracleProcess.OracleParam[] memory oracles
@@ -210,11 +250,18 @@ library LpPoolQueryProcess {
         return poolValue <= 0 ? 0 : poolValue.toUint256();
     }
 
+    /// @dev Retrieves the integer value of the USD pool.
+    /// @param pool LpPool storage
+    /// @return int256 The integer value of the USD pool.
     function getUsdPoolIntValue(UsdPool.Props storage pool) public view returns (int256) {
         OracleProcess.OracleParam[] memory oracles;
         return getUsdPoolIntValue(pool, oracles);
     }
 
+    /// @dev Retrieves the integer value of the USD pool with oracle data.
+    /// @param pool LpPool storage
+    /// @param oracles Oracle data with price feeds.
+    /// @return int256 The integer value of the USD pool.
     function getUsdPoolIntValue(
         UsdPool.Props storage pool,
         OracleProcess.OracleParam[] memory oracles
@@ -238,6 +285,13 @@ library LpPoolQueryProcess {
         return value;
     }
 
+    /// @dev Retrieves the unrealized PNL for a given market (symbol).
+    /// @param symbol The market symbol.
+    /// @param oracles Oracle data with price feeds.
+    /// @param isLong The long/short direction
+    /// @param marginToken Address of the margin token.
+    /// @param pnlToken Boolean indicating if the PnL is in token.
+    /// @return int256 The unrealized PnL.
     function getMarketUnPnl(
         bytes32 symbol,
         OracleProcess.OracleParam[] memory oracles,
@@ -278,6 +332,10 @@ library LpPoolQueryProcess {
         }
     }
 
+    /// @dev Retrieves the information of a specific pool.
+    /// @param stakeToken Address of the LP stake token.
+    /// @param oracles Oracle data with price feeds.
+    /// @return IPool.PoolInfo The pool information.
     function getPool(
         address stakeToken,
         OracleProcess.OracleParam[] memory oracles
@@ -308,6 +366,9 @@ library LpPoolQueryProcess {
         return result;
     }
 
+    /// @dev Converts a pool balance to IPool.MintTokenBalance.
+    /// @param balance LpPool.TokenBalance storage containing the token balance.
+    /// @return IPool.MintTokenBalance The converted balance.
     function _convertPoolBalance(
         LpPool.TokenBalance storage balance
     ) internal view returns (IPool.MintTokenBalance memory) {
@@ -326,6 +387,10 @@ library LpPoolQueryProcess {
             );
     }
 
+    /// @dev Converts stable token balances to an array of IPool.MintTokenBalance.
+    /// @param stableTokens Array of addresses of stable tokens.
+    /// @param stableTokenBalances Mapping of stable token balances.
+    /// @return IPool.MintTokenBalance[]
     function _convertPoolStableBalance(
         address[] memory stableTokens,
         mapping(address => LpPool.TokenBalance) storage stableTokenBalances

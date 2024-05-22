@@ -10,6 +10,8 @@ import "./CancelOrderProcess.sol";
 import "./FeeQueryProcess.sol";
 import "./PositionMarginProcess.sol";
 
+/// @title DecreasePositionProcess
+/// @dev Library for decreasing position functions 
 library DecreasePositionProcess {
     using SafeMath for uint256;
     using SafeCast for uint256;
@@ -22,6 +24,15 @@ library DecreasePositionProcess {
     using AccountProcess for Account.Props;
     using Market for Market.Props;
 
+    /// @dev DecreasePositionParams struct used in decreasePosition
+    ///
+    /// @param requestId the unique request id for decreasing position
+    /// @param symbol position's market
+    /// @param isLiquidation liquidation a position
+    /// @param isCrossMargin whether it is a cross-margin position
+    /// @param marginToken the address of margin token
+    /// @param decreaseQty closed size of position
+    /// @param executePrice the index token price of decreasing position
     struct DecreasePositionParams {
         uint256 requestId;
         bytes32 symbol;
@@ -32,6 +43,30 @@ library DecreasePositionProcess {
         uint256 executePrice;
     }
 
+    /// @dev DecreasePositionCache struct used to record intermediate state values to avoid stack too deep errors
+    ///
+    /// @param stakeToken the address of the pool.
+    /// @param position Position.Props.
+    /// @param marginTokenPrice The price of the margin token.
+    /// @param executePrice The price at which the position is decreased.
+    /// @param recordPnlToken The recorded profit and loss in tokens.
+    /// @param settledMargin The settled margin amount.
+    /// @param decreaseMargin The amount by which the margin is decreased.
+    /// @param decreaseIntQty The integer quantity by which the position is decreased.
+    /// @param positionIntQty The integer quantity of the position.
+    /// @param decreaseMarginInUsd The amount by which the margin is decreased, in USD.
+    /// @param decreaseMarginInUsdFromBalance The amount by which the margin is decreased from the balance, in USD.
+    /// @param settledBorrowingFee The settled borrowing fee.
+    /// @param settledBorrowingFeeInUsd The settled borrowing fee, in USD.
+    /// @param settledFundingFee The settled funding fee.
+    /// @param settledFundingFeeInUsd The settled funding fee, in USD.
+    /// @param settledFee The total settled fee.
+    /// @param unHoldPoolAmount The amount unheld in the pool.
+    /// @param closeFee The closing fee.
+    /// @param closeFeeInUsd The closing fee, in USD.
+    /// @param realizedPnl The realized profit and loss.
+    /// @param poolPnlToken The profit and loss in the pool, in tokens.
+    /// @param isLiquidation Indicates if the position is being liquidated
     struct DecreasePositionCache {
         address stakeToken;
         Position.Props position;
@@ -57,6 +92,25 @@ library DecreasePositionProcess {
         bool isLiquidation;
     }
 
+    /// @notice Decreases a position by closing it or partially closing it, including liquidation.
+    /// @dev The decreasePosition function performs the following steps:
+    /// 1. Calculates the unrealized profit and loss (PnL) of the position in USD.
+    /// 2. Updates the borrowing fee and funding fee of the original position.
+    /// 3. Settles the position and the pool.
+    /// 4. Updates market-related information.
+    ///
+    /// During settlement, all fees are settled first, followed by the initial margin and PnL.
+    /// Settlement fees include borrow fee, close fee, and funding fee, and their actual token assets will be stored in the Market Vault (stakeToken).
+    /// The settled margin is the amount of funds settled for the user:
+    /// - For isolated positions, the settled margin will be transferred to the user's own wallet.
+    /// - For cross margin, the funds will remain in the PortfolioVault.
+    /// The transfer of vault funds is executed in _settleCrossAccount and _settleIsolateAccount, while other logic uses virtual accounting.
+    ///
+    /// After cross margin settlement, the user may incur a debt, which will be recorded in the account liability. When the user's debt exceeds a certain limit, the keeper will trigger the logic for the user to actively repay the liability. 
+    /// The user will also prioritize repaying the debt after making a deposit or closing a position with a profit.
+    ///
+    /// @param position Position.Props
+    /// @param params DecreasePositionParams
     function decreasePosition(Position.Props storage position, DecreasePositionParams calldata params) external {
         int256 totalPnlInUsd = PositionQueryProcess.getPositionUnPnl(position, params.executePrice.toInt256(), false);
         Symbol.Props memory symbolProps = Symbol.load(params.symbol);
@@ -137,7 +191,7 @@ library DecreasePositionProcess {
             );
         }
 
-        // update total borrowing
+        /// update total borrowing
         MarketProcess.updateTotalBorrowingFee(
             symbolProps.stakeToken,
             cache.position.isLong,
@@ -146,7 +200,7 @@ library DecreasePositionProcess {
             -cache.settledBorrowingFee.toInt256()
         );
 
-        // update funding fee
+        /// update funding fee
         MarketProcess.updateMarketFundingFee(
             symbolProps.code,
             -cache.settledFundingFee,
@@ -155,7 +209,7 @@ library DecreasePositionProcess {
             cache.position.marginToken
         );
 
-        // update & verify OI
+        /// update & verify OI
         MarketProcess.updateMarketOI(
             MarketProcess.UpdateOIParams(
                 false,
@@ -167,7 +221,7 @@ library DecreasePositionProcess {
             )
         );
 
-        // cancel stop orders
+        /// cancel stop orders
         CancelOrderProcess.cancelStopOrders(
             cache.position.account,
             symbolProps.code,
@@ -177,7 +231,7 @@ library DecreasePositionProcess {
             params.requestId
         );
 
-        // update insuranceFund
+        /// update insuranceFund
         if (cache.isLiquidation) {
             _addFunds(cache);
         }
@@ -203,6 +257,15 @@ library DecreasePositionProcess {
         );
     }
 
+    /// @dev Calculates all settlement values for the positionn.
+    /// @param position Position.Props.
+    /// @param decreaseQty The quantity to decrease.
+    /// @param pnlInUsd The profit and loss in USD.
+    /// @param executePrice The execution price of market index token.
+    /// @param closeFeeRate The close fee rate.
+    /// @param isLiquidation Whether the position is being liquidated.
+    /// @param isCrossMargin Whether the position is cross margin.
+    /// @return cache DecreasePositionCache.
     function _updateDecreasePosition(
         Position.Props storage position,
         uint256 decreaseQty,
@@ -335,6 +398,12 @@ library DecreasePositionProcess {
         return cache;
     }
 
+    /// @dev Settles the cross margin position.
+    /// @param requestId The request ID.
+    /// @param accountProps Account.Props.
+    /// @param position Position.Props.
+    /// @param cache DecreasePositionCache.
+    /// @return addLiability The additional liability.
     function _settleCrossAccount(
         uint256 requestId,
         Account.Props storage accountProps,
@@ -413,6 +482,9 @@ library DecreasePositionProcess {
         }
     }
 
+    /// @dev Settles an isolated margin position.
+    /// @param accountProps Account.Props.
+    /// @param cache DecreasePositionCache.
     function _settleIsolateAccount(Account.Props storage accountProps, DecreasePositionCache memory cache) internal {
         if (cache.isLiquidation) {
             return;
@@ -443,6 +515,8 @@ library DecreasePositionProcess {
         }
     }
 
+    /// @dev Adds funds to the insurance fund.
+    /// @param cache DecreasePositionCache.
     function _addFunds(DecreasePositionCache memory cache) internal {
         if (cache.position.isCrossMargin) {
             InsuranceFund.addFunds(
@@ -467,6 +541,9 @@ library DecreasePositionProcess {
         InsuranceFund.addFunds(cache.stakeToken, cache.position.marginToken, addFunds);
     }
 
+    /// @dev Calculates the position fee.
+    /// @param cache DecreasePositionCache.
+    /// @return The calculated position fee.
     function _getPosFee(DecreasePositionCache memory cache) internal pure returns (int256) {
         return
             cache.closeFeeInUsd.toInt256() + cache.settledBorrowingFeeInUsd.toInt256() + cache.settledFundingFeeInUsd;
